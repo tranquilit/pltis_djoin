@@ -6,6 +6,7 @@ begin
   with TDJoin.Create do
   try
     LoadFromFile('C:\temp\djoin.txt');
+    Dump;
   finally
     Free;
   end;
