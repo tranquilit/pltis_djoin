@@ -17,6 +17,9 @@ const
 type
   {$A-} // every record (or object) is packed from now on
 
+  TRDN_Ptr = UInt32;
+  TODJ_Format = (ODJ_WIN7BLOB, OP_PACKAGE);
+
   TCommonTypeHeader = record
     case bool of
       False: (Version: Byte;
@@ -39,6 +42,96 @@ type
   end;
   PRDNPrivateHeader = ^TRDNPrivateHeader;
 
+  TODJ_UNICODE_STRING = record
+    Length: UInt16;
+    MaximumLength: UInt16;
+    Buffer: TRDN_Ptr;
+  end;
+  PODJ_UNICODE_STRING = ^TODJ_UNICODE_STRING;
+
+  TOP_BLOB = record
+    cbBlob: UInt32;
+    pBlobl: TRDN_Ptr;
+  end;
+  POP_BLOB = ^TOP_BLOB;
+
+  TODJ_OPLICY_DNS_DOMAIN_INFO = record
+    Name: TODJ_UNICODE_STRING;
+    DnsDomainName: TODJ_UNICODE_STRING;
+    DnsForestName: TODJ_UNICODE_STRING;
+    DomainGuid: TGuid;
+    Sid: TRDN_Ptr;
+  end;
+  PODJ_OPLICY_DNS_DOMAIN_INFO = ^TODJ_OPLICY_DNS_DOMAIN_INFO;
+
+  TDOMAIN_CONTROLLER_INFO = record
+    dc_unc: WideString;
+    dc_address: WideString;
+    dc_address_type: UInt32;
+    domain_guid: TGuid;
+    domain_name: WideString;
+    forest_name: WideString;
+    dc_flags: UInt32;
+    dc_site_name: WideString;
+    client_site_name: WideString;
+  end;
+  PDOMAIN_CONTROLLER_INFO = ^TDOMAIN_CONTROLLER_INFO;
+
+  TODJ_WIN7BLOB = record
+    lpDomain: WideString;
+    lpMachineName: WideString;
+    lpMachinePassword: WideString;
+    DnsDomainInfo: TODJ_OPLICY_DNS_DOMAIN_INFO;
+    DcInfo: TDOMAIN_CONTROLLER_INFO;
+    Options: UInt32;
+  end;
+  PODJ_WIN7BLOB = ^TODJ_WIN7BLOB;
+
+  TOP_PACKAGE_PART = record
+    PartType: TGUID;
+    ulFlags: UInt32;
+    Part: TOP_BLOB;
+    Extension: TOP_BLOB;
+  end;
+  POP_PACKAGE_PART = ^TOP_PACKAGE_PART;
+
+  TOP_PACKAGE_PART_COLLECTION = record
+    cParts: UInt32;
+    pParts: POP_PACKAGE_PART;
+    Extension: TOP_BLOB;
+  end;
+  POP_PACKAGE_PART_COLLECTION = ^TOP_PACKAGE_PART_COLLECTION;
+
+  TOP_PACKAGE = record
+    EncryptionType: TGUID;
+    EncryptionContext: TOP_BLOB;
+    WrappedPartCollection: TOP_BLOB;
+    cbDecryptedPartCollection: UInt32;
+    Extension: TOP_BLOB;
+  end;
+  POP_PACKAGE = ^TOP_PACKAGE;
+
+  TODJ_BLOB_buffer_u = record
+    case UInt32 of
+      1: (Win7Blob: PODJ_WIN7BLOB);
+      2: (OPPackage: POP_PACKAGE);
+  end;
+  PODJ_BLOB_buffer_u = ^TODJ_BLOB_buffer_u;
+
+  TODJ_BLOB = record
+    ulODJFormat: TODJ_Format;
+    cbBlob: UInt32;
+    pBlob: TODJ_BLOB_buffer_u;
+  end;
+  PODJ_BLOB = ^TODJ_BLOB;
+
+  TODJ_PROVISION_DATA = record
+    Version: UInt32;
+    ulcBlobs: UInt32;
+    pBlobs: PODJ_BLOB;
+  end;
+  PODJ_PROVISION_DATA = ^TODJ_PROVISION_DATA;
+
   TDJoinString = record
     BuffSize: UInt32;
     BuffOffset: UInt32;
@@ -46,15 +139,6 @@ type
     Buffer: Char;
   end;
   PDJoinString = ^TDJoinString;
-
-  TMagicDecoder = record
-    case longint of
-    0: (ui64: UInt64);
-    1: (ui32_1, ui32_2: UInt32);
-    2: (ui16_1, ui16_2, ui16_3, ui16_4: UInt16);
-    3: (bytes: array [0 .. 7] of Byte);
-  end;
-  PMagicDecoder = ^TMagicDecoder;
 
   { TDJoin }
 
@@ -69,6 +153,9 @@ type
     procedure NextString(var Str: PDJoinString);
 
     function ConvertString(Str: PDJoinString): RawUtf8;
+    function Parse: Boolean;
+
+    function CheckODJ_PROVISION_DATA: Boolean;
   public
     constructor Create;
 
@@ -93,6 +180,7 @@ implementation
 
 const
   EXPECTED_COMMON_HEADER : UInt64 = $cccccccc00081001;
+  PRIVATE_HEADER_FILLER: UInt32 = 0;
   OPTIONS_OFFSET = $40;
   GLOBAL_DOMAIN_OFFSET = $b4;
   DNS_POLICY_GUID_OFFSET = $78;
@@ -118,35 +206,16 @@ begin
   Result := RawUnicodeToUtf8(@Str^.Buffer, Str^.BuffLen);
 end;
 
-constructor TDJoin.Create;
-begin
-
-end;
-
-function TDJoin.LoadFromFile(const Filename: TFileName): boolean;
+function TDJoin.Parse: Boolean;
 var
   CurrentStr: PDJoinString;
   Sid: PSid;
-  Base64Utf16: RawByteString;
-  Base64, guidStr: RawUtf8;
+  guidStr: RawUtf8;
   guid: PGuid;
   temp: TRawSmbiosInfo;
-  i: Integer;
 begin
-  Unload;
-  Base64Utf16 := StringFromFile(Filename);
-  Base64 := RawUnicodeToUtf8(pointer(Base64Utf16), Length(WideString(Base64Utf16)) div 2 - 1);
-  fBinaryContent := Base64toBin(Base64);
-  fBufferLength := Length(fBinaryContent);
-  FileFromString(fBinaryContent, 'C:\temp\djoin_unix.bin');
-  Result := fBinaryContent <> '';
-
-  // Not base64 encoded
-  if not Result then
-    Exit;
-
-  // Payload length and actual length differs
-  if (ODJ_PROVISION_DATA_header^.CommonHeader.Header <> EXPECTED_COMMON_HEADER) or (ODJ_PROVISION_DATA_header^.PrivateHeader.ObjectBufferLength <> BufferLength - sizeof(ODJ_PROVISION_DATA_header^)) then
+  // Header length and actual length differs
+  if not CheckODJ_PROVISION_DATA then
     Exit(False);
 
   // File too short to contains the options
@@ -200,9 +269,47 @@ begin
   Result := True;
 end;
 
+function TDJoin.CheckODJ_PROVISION_DATA: Boolean;
+var
+  h: PRDNPrivateHeader;
+begin
+  h := ODJ_PROVISION_DATA_header;
+  Result :=  (h^.CommonHeader.Header = EXPECTED_COMMON_HEADER) and
+             (h^.PrivateHeader.ObjectBufferLength = BufferLength - sizeof(h^)) and
+             (h^.PrivateHeader.Filler = PRIVATE_HEADER_FILLER);
+end;
+
+constructor TDJoin.Create;
+begin
+
+end;
+
+function TDJoin.LoadFromFile(const Filename: TFileName): boolean;
+var
+  Base64Utf16: RawByteString;
+  Base64, Binary: RawUtf8;
+begin
+  Unload;
+
+  Base64Utf16 := StringFromFile(Filename);
+  Base64 := RawUnicodeToUtf8(pointer(Base64Utf16), Length(WideString(Base64Utf16)) div 2 - 1);
+  Binary := Base64toBin(Base64);
+
+  // Not base64 encoded
+  if Binary = '' then
+    Exit(False);
+
+  fBinaryContent := Binary;
+  fBufferLength := Length(fBinaryContent);
+  Result := Parse;
+  if not Result then
+    Unload;
+end;
+
 procedure TDJoin.Unload;
 begin
   fBinaryContent := '';
+  fBufferLength := 0;
   fOptions := nil;
 end;
 
