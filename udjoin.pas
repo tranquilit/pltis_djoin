@@ -88,8 +88,12 @@ type
     procedure Pack(Content: Pointer; Len: SizeInt);
     procedure PackHeader(Size: SizeInt);
     procedure PackByte(Value: Byte);
+    procedure PackUInt16(Value: UInt16);
     procedure PackUInt32(Value: UInt32);
     procedure PackPtr(Value: Pointer);
+    procedure PackGuid(Value: TGuid);
+    procedure PackSidPtr(Value: PSid);
+    procedure PackWideStr(Value: WideString);
   end;
 
   { TNDRCustomType }
@@ -116,6 +120,7 @@ type
     Buffer: WideString;
 
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   PODJ_UNICODE_STRING = ^TODJ_UNICODE_STRING;
 
@@ -139,6 +144,7 @@ type
     Sid: PSid;
 
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   PODJ_POLICY_DNS_DOMAIN_INFO = ^TODJ_POLICY_DNS_DOMAIN_INFO;
 
@@ -156,6 +162,7 @@ type
     client_site_name: WideString;
 
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   PDOMAIN_CONTROLLER_INFO = ^TDOMAIN_CONTROLLER_INFO;
 
@@ -258,6 +265,7 @@ type
     pBlob: TODJ_BLOB_buffer_u;
 
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   PODJ_BLOB = ^TODJ_BLOB;
 
@@ -567,7 +575,7 @@ end;
 procedure TDOMAIN_CONTROLLER_INFO.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32
   );
 begin
-    if (NDRFormat and NDR_Scalar) > 0 then
+  if (NDRFormat and NDR_Scalar) > 0 then
   begin
     // dc_unc
     Ctx.UnpackPtr;
@@ -594,6 +602,33 @@ begin
     forest_name := Ctx.UnpackWideStr;
     dc_site_name := Ctx.UnpackWideStr;
     client_site_name := Ctx.UnpackWideStr;
+  end;
+end;
+
+procedure TDOMAIN_CONTROLLER_INFO.NDRPack(Ctx: TNDRPackContext;
+  NDRFormat: UInt32);
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackPtr(Pointer(dc_unc));
+    Ctx.PackPtr(Pointer(dc_address));
+    Ctx.PackUInt32(dc_address_type);
+    Ctx.PackGuid(domain_guid);
+    Ctx.PackPtr(Pointer(domain_name));
+    Ctx.PackPtr(Pointer(forest_name));
+    Ctx.PackUInt32(dc_flags);
+    Ctx.PackPtr(Pointer(dc_site_name));
+    Ctx.PackPtr(Pointer(client_site_name));
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    Ctx.PackWideStr(dc_unc);
+    Ctx.PackWideStr(dc_address);
+    Ctx.PackWideStr(domain_name);
+    Ctx.PackWideStr(forest_name);
+    Ctx.PackWideStr(dc_site_name);
+    Ctx.PackWideStr(client_site_name);
   end;
 end;
 
@@ -626,6 +661,24 @@ begin
   end;
 end;
 
+procedure TODJ_UNICODE_STRING.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackUInt16(Length);
+    Ctx.PackUInt16(MaximumLength);
+    Ctx.PackPtr(Pointer(Buffer));
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    Ctx.PackUInt32(MaximumLength div 2);
+    Ctx.PackUInt32(0);
+    Ctx.PackUInt32(Length div 2);
+    Ctx.Pack(@Buffer[1], MaximumLength);
+  end;
+end;
+
 { TODJ_POLICY_DNS_DOMAIN_INFO }
 
 procedure TODJ_POLICY_DNS_DOMAIN_INFO.NDRUnpack(Ctx: TNDRUnpackContext;
@@ -647,6 +700,28 @@ begin
     DnsForestName.NDRUnpack(Ctx, NDR_Buffer);
     if Assigned(Sid) then
       Sid := Ctx.UnpackSidPtr
+  end;
+end;
+
+procedure TODJ_POLICY_DNS_DOMAIN_INFO.NDRPack(Ctx: TNDRPackContext;
+  NDRFormat: UInt32);
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Name.NDRPack(Ctx, NDR_Scalar);
+    DnsDomainName.NDRPack(Ctx, NDR_Scalar);
+    DnsForestName.NDRPack(Ctx, NDR_Scalar);
+    Ctx.PackGuid(DomainGuid);
+    Ctx.PackPtr(Sid);
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    Name.NDRPack(Ctx, NDR_Buffer);
+    DnsDomainName.NDRPack(Ctx, NDR_Buffer);
+    DnsForestName.NDRPack(Ctx, NDR_Buffer);
+    if Assigned(Sid) then
+      Ctx.PackSidPtr(Sid);
   end;
 end;
 
@@ -701,7 +776,28 @@ end;
 
 procedure TODJ_WIN7BLOB.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
 begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackPtr(Pointer(lpDomain));
+    Ctx.PackPtr(Pointer(lpMachineName));
+    Ctx.PackPtr(Pointer(lpMachinePassword));
+    /// Padding
+    Ctx.PackUInt32(-1);
+    DnsDomainInfo.NDRPack(Ctx, NDR_Scalar);
+    DcInfo.NDRPack(Ctx, NDR_Scalar);
+    Ctx.PackUInt32(Options);
+  end;
 
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    Ctx.PackWideStr(lpDomain);
+    Ctx.PackWideStr(lpMachineName);
+    Ctx.PackWideStr(lpMachinePassword);
+    DnsDomainInfo.NDRPack(Ctx, NDR_Buffer);
+    DcInfo.NDRPack(Ctx, NDR_Buffer);
+    // Padding but don't know why
+    Ctx.PackUInt32(0);
+  end;
 end;
 
 { TODJ_BLOB }
@@ -743,6 +839,33 @@ begin
     end;
 end;
 
+procedure TODJ_BLOB.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
+var
+  TempOpPackage: TOP_PACKAGE_ctr;
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackUInt32(UInt32(ulODJFormat));
+    Ctx.PackUInt32(cbBlob);
+    Ctx.PackPtr(pBlob.RawBytes);
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+    if Assigned(pBlob.RawBytes) then
+    begin
+      Ctx.PackUInt32(cbBlob);
+      case ulODJFormat of
+        ODJ_WIN7BLOB:
+          TODJ_WIN7BLOB_serialized.NDRPack(Ctx, pBlob.Win7Blob^);
+        OP_PACKAGE:
+          begin
+            TempOpPackage.p := pBlob.OPPackage^;
+            TOP_PACKAGE_serialized_ptr.NDRPack(Ctx, TempOpPackage);
+          end;
+      end;
+    end;
+end;
+
 { TODJ_PROVISION_DATA }
 
 procedure TODJ_PROVISION_DATA.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
@@ -774,12 +897,27 @@ begin
 end;
 
 procedure TODJ_PROVISION_DATA.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
+var
+  i: Integer;
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
     Ctx.PackUInt32(Version);
     Ctx.PackUInt32(ulcBlobs);
     Ctx.PackPtr(Pointer(Length(pBlobs)));
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    Ctx.PackUInt32(ulcBlobs);
+
+    // Scalar Part
+    for i := 0 to ulcBlobs - 1 do
+      pBlobs[i].NDRPack(Ctx, NDR_Scalar);
+
+    // Buffer Part
+    for i := 0 to ulcBlobs - 1 do
+      pBlobs[i].NDRPack(Ctx, NDR_Buffer);
   end;
 end;
 
@@ -836,6 +974,11 @@ begin
 end;
 
 procedure TNDRPackContext.PackByte(Value: Byte);
+begin
+  Pack(@Value, SizeOf(Value));
+end;
+
+procedure TNDRPackContext.PackUInt16(Value: UInt16);
 begin
   Pack(@Value, SizeOf(Value));
 end;
@@ -908,6 +1051,31 @@ begin
     Inc(PointerCount);
   end;
   PackUInt32(PtrVal);
+end;
+
+procedure TNDRPackContext.PackGuid(Value: TGuid);
+begin
+  Pack(@Value, SizeOf(Value));
+end;
+
+procedure TNDRPackContext.PackSidPtr(Value: PSid);
+var
+  Len: UInt32;
+begin
+  Len := 8 + Sizeof(UInt32) * Value^.SubAuthorityCount;
+  PackUInt32(Value^.SubAuthorityCount);
+  Pack(Value, Len);
+end;
+
+procedure TNDRPackContext.PackWideStr(Value: WideString);
+var
+  Len: SizeInt;
+begin
+  Len := Length(Value);
+  PackUInt32(Len);
+  PackUInt32(0);
+  PackUInt32(Len);
+  Pack(@Value[1], Len * 2);
 end;
 
 { TNDRCustomType }
