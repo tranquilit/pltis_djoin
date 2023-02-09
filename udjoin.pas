@@ -131,6 +131,7 @@ type
     pBlob: PByte;
 
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   POP_BLOB = ^TOP_BLOB;
 
@@ -206,6 +207,7 @@ type
     Extension: TOP_BLOB;
 
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   POP_PACKAGE_PART = ^TOP_PACKAGE_PART;
 
@@ -230,6 +232,7 @@ type
     pPackagePartCollection: POP_PACKAGE_PART_COLLECTION;
 
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   POP_PACKAGE_PART_COLLECTION_blob = ^TOP_PACKAGE_PART_COLLECTION_blob;
 
@@ -411,7 +414,17 @@ end;
 
 procedure TOP_JOINPROV3_PART.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
 begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackUInt32(Rid);
+    Ctx.PackPtr(Pointer(lpSid));
+  end;
 
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    Ctx.PackWideStr(lpSid);
+    Ctx.PackUInt32(0);
+  end;
 end;
 
 { TOP_PACKAGE_PART }
@@ -454,6 +467,35 @@ begin
   end;
 end;
 
+procedure TOP_PACKAGE_PART.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
+var
+  JoinProv: TOP_JOINPROV3_PART_ctr;
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackGuid(PartType);
+    Ctx.PackUInt32(ulFlags);
+    Part.NDRPack(Ctx, NDR_Scalar);
+    Extension.NDRPack(Ctx, NDR_Scalar);
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    if Assigned(Part.pBlob) then
+    begin
+      Ctx.PackUInt32(Part.cbBlob);
+
+      if IsEqualGuid(PartType, GUID_JOIN_PROVIDER) then
+        TODJ_WIN7BLOB_serialized.NDRPack(Ctx, PODJ_WIN7BLOB(Part.pBlob)^)
+      else if IsEqualGuid(PartType, GUID_JOIN_PROVIDER3) then
+      begin
+        JoinProv.p := POP_JOINPROV3_PART(Part.pBlob)^;
+        TOP_JOINPROV3_PART_serialized_ptr.NDRPack(Ctx, JoinProv);
+      end;
+    end;
+  end;
+end;
+
 { TOP_PACKAGE_PART_COLLECTION }
 
 procedure TOP_PACKAGE_PART_COLLECTION.NDRUnpack(Ctx: TNDRUnpackContext;
@@ -485,8 +527,25 @@ end;
 
 procedure TOP_PACKAGE_PART_COLLECTION.NDRPack(Ctx: TNDRPackContext;
   NDRFormat: UInt32);
+var
+  i: Integer;
 begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackUInt32(cParts);
+    Ctx.PackPtr(Pointer(Length(pParts)));
+    Extension.NDRPack(Ctx, NDR_Scalar);
+  end;
 
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    Ctx.PackUInt32(cParts);
+    for i := 0 to cParts - 1 do
+      pParts[i].NDRPack(Ctx, NDR_Scalar);
+    for i := 0 to cParts - 1 do
+      pParts[i].NDRPack(Ctx, NDR_Buffer);
+    //Extension.NDRUnpack(Ctx, NDR_Buffer);
+  end;
 end;
 
 { TOP_PACKAGE_PART_COLLECTION_blob }
@@ -518,6 +577,26 @@ begin
     end;
 end;
 
+procedure TOP_PACKAGE_PART_COLLECTION_blob.NDRPack(Ctx: TNDRPackContext;
+  NDRFormat: UInt32);
+var
+  OpPackagePart: TOP_PACKAGE_PART_COLLECTION_ctr;
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackUInt32(cbBlob);
+    Ctx.PackPtr(pPackagePartCollection);
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+    if Assigned(pPackagePartCollection) then
+    begin
+      Ctx.PackUInt32(cbBlob);
+      OpPackagePart.p := pPackagePartCollection^;
+      TOP_PACKAGE_PART_COLLECTION_serialized_ptr.NDRPack(Ctx, OpPackagePart);
+    end;
+end;
+
 { TOP_BLOB }
 
 procedure TOP_BLOB.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
@@ -540,6 +619,22 @@ begin
       pBlob := GetMem(Size);
       FillZero(pBlob^, Size);
       Move(PByte(Ctx.Unpack(Size))^, pBlob, Size);
+    end;
+end;
+
+procedure TOP_BLOB.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackUInt32(cbBlob);
+    Ctx.PackPtr(pBlob);
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+    if Assigned(pBlob) then
+    begin
+      Ctx.PackUInt32(cbBlob);
+      Ctx.Pack(pBlob, cbBlob);
     end;
 end;
 
@@ -567,7 +662,23 @@ end;
 
 procedure TOP_PACKAGE.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
 begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackGuid(EncryptionType);
+    EncryptionContext.NDRPack(Ctx, NDR_Scalar);
+    // Package part collection blob
+    WrappedPartCollection.NDRPack(Ctx, NDR_Scalar);
+    Ctx.PackUInt32(cbDecryptedPartCollection);
+    Extension.NDRPack(Ctx, NDR_Scalar);
+  end;
 
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    EncryptionContext.NDRPack(Ctx, NDR_Buffer);
+    WrappedPartCollection.NDRPack(Ctx, NDR_Buffer);
+    Extension.NDRPack(Ctx, NDR_Buffer);
+    Ctx.PackUInt32(0);
+  end;
 end;
 
 { TDOMAIN_CONTROLLER_INFO }
@@ -918,6 +1029,7 @@ begin
     // Buffer Part
     for i := 0 to ulcBlobs - 1 do
       pBlobs[i].NDRPack(Ctx, NDR_Buffer);
+    Ctx.PackUInt32(0);
   end;
 end;
 
