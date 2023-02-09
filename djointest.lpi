@@ -39,6 +39,16 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="uDJoin"/>
       </Unit>
+      <Unit>
+        <Filename Value="udjointypes.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uDJoinTypes"/>
+      </Unit>
+      <Unit>
+        <Filename Value="undrcontext.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uNDRContext"/>
+      </Unit>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
