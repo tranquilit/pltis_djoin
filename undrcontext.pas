@@ -289,16 +289,14 @@ end;
 
 procedure TNDRPackContext.PackWideStr(Value: WideString);
 var
-  BufferLen: SizeInt;
   StringLength: PtrInt;
 begin
-  BufferLen := Length(Value);
   StringLength := StrLenW(PWideChar(@Value[1])) + 1;
 
   PackUInt32(StringLength);
   PackUInt32(0);
   PackUInt32(StringLength);
-  Pack(@Value[1], BufferLen * 2);
+  Pack(@Value[1], StringLength * 2);
 end;
 
 { TNDRCustomType }

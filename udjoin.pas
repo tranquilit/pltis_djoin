@@ -39,7 +39,14 @@ type
     fDCClientSiteName: RawUtf8;
 
     // OP_PACKAGE
-    fMachineSid: TSid;
+    fMachineRid: UInt32;
+
+
+    procedure FillProvision(var ProvisionData: TODJ_PROVISION_DATA);
+    procedure FillWin7blob(var Win7Blob: TODJ_WIN7BLOB);
+    procedure FillDnsPolicy(var DnsPolicy: TODJ_POLICY_DNS_DOMAIN_INFO);
+    procedure FillDCInfo(var DCInfo: TDOMAIN_CONTROLLER_INFO);
+    procedure FillOpPackagePartCollection(var OpPackagePartCollection: TOP_PACKAGE_PART_COLLECTION);
   public
     constructor Create;
 
@@ -48,6 +55,7 @@ type
     function LoadFromFile(const Filename: TFileName): boolean;
 
     function LoadFromProvisionData(const ProvisionData: TODJ_PROVISION_DATA): Boolean;
+    procedure SaveToFile(Filename: TFileName);
 
     procedure Dump;
 
@@ -55,7 +63,7 @@ type
     property MachineDomainName: RawUtf8 read fMachineDomainName write fMachineDomainName;
     property MachineName: RawUtf8 read fMachineName write fMachineName;
     property MachinePassword: SpiUtf8 read fMachinePassword write fMachinePassword;
-    property MachineSid: TSid read fMachineSid write fMachineSid;
+    property MachineRid: UInt32 read fMachineRid write fMachineRid;
     property Options: UInt32 read fOptions write fOptions;
     // Policy DNS Domain
     property PolicyDomainName: RawUtf8 read fPolicyDomainName write fPolicyDomainName;
@@ -77,13 +85,10 @@ type
 
   TDJoinParser = class
   public
-
     class function ParseFile(FileName: TFileName; out DJoin: TDJoin): Boolean;
     class function ParseFileContent(FileContent: RawByteString; out DJoin: TDJoin): Boolean;
     class function ParseBinary(Binary: RawByteString; out DJoin: TDJoin): Boolean;
   end;
-
-
 
 implementation
 
@@ -112,7 +117,6 @@ var
   OpPackage: POP_PACKAGE;
   PackageParts: POP_PACKAGE_PART_COLLECTION;
   Part: TOP_PACKAGE_PART;
-  TempSidStr: RawUtf8;
 begin
   for BlobId := 0 to ProvisionData.ulcBlobs - 1 do
   begin
@@ -149,14 +153,95 @@ begin
           Part := PackageParts^.pParts[PartId];
 
           if IsEqualGuid(Part.PartType, GUID_JOIN_PROVIDER3) then
-          begin
-            TempSidStr := WideStringToUtf8(POP_JOINPROV3_PART(Part.Part.pBlob)^.lpSid);
-            TextToSid(PChar(@TempSidStr[1]), fMachineSid);
-          end;
+            MachineRid := POP_JOINPROV3_PART(Part.Part.pBlob)^.Rid;
         end;
       end;
     end;
   end;
+end;
+
+procedure TDJoin.FillProvision(var ProvisionData: TODJ_PROVISION_DATA);
+begin
+  ProvisionData.Version := 1;
+  ProvisionData.ulcBlobs := 2;
+  SetLength(ProvisionData.pBlobs, 2);
+
+  // Win7
+  ProvisionData.pBlobs[0].ulODJFormat := ODJ_WIN7BLOB;
+  New(ProvisionData.pBlobs[0].pBlob.Win7Blob);
+  FillWin7blob(ProvisionData.pBlobs[0].pBlob.Win7Blob^);
+
+  // Win8
+  ProvisionData.pBlobs[1].ulODJFormat := OP_PACKAGE;
+  New(ProvisionData.pBlobs[1].pBlob.OPPackage);
+  FillZero(ProvisionData.pBlobs[1].pBlob.OPPackage^, SizeOf(TOP_PACKAGE));
+  New(ProvisionData.pBlobs[1].pBlob.OPPackage^.WrappedPartCollection.pPackagePartCollection);
+  FillOpPackagePartCollection(ProvisionData.pBlobs[1].pBlob.OPPackage^.WrappedPartCollection.pPackagePartCollection^);
+end;
+
+procedure TDJoin.FillWin7blob(var Win7Blob: TODJ_WIN7BLOB);
+begin
+  Win7Blob.lpDomain := Utf8ToWideString(MachineDomainName);
+  Win7Blob.lpMachineName := Utf8ToWideString(MachineName);
+  Win7Blob.lpMachinePassword := Utf8ToWideString(MachinePassword);
+  FillDnsPolicy(Win7Blob.DnsDomainInfo);
+  FillDCInfo(Win7Blob.DcInfo);
+  Win7Blob.Options := Options;
+end;
+
+procedure TDJoin.FillDnsPolicy(var DnsPolicy: TODJ_POLICY_DNS_DOMAIN_INFO);
+begin
+  DnsPolicy.Name.Buffer := Utf8ToWideString(PolicyDomainName);
+  DnsPolicy.DnsDomainName.Buffer := Utf8ToWideString(DnsDomainName);
+  DnsPolicy.DnsForestName.Buffer := Utf8ToWideString(DnsForestName);
+  DnsPolicy.DomainGuid := DomainGUID;
+  DnsPolicy.Sid := @DomainSID;
+end;
+
+procedure TDJoin.FillDCInfo(var DCInfo: TDOMAIN_CONTROLLER_INFO);
+begin
+  DCInfo.dc_unc := Utf8ToWideString(DCName);
+  DCInfo.dc_address := Utf8ToWideString(DCAddress);
+  DCInfo.dc_address_type := DCAddressType;
+  DCInfo.domain_guid := DomainGUID;
+  DCInfo.domain_name := Utf8ToWideString(DnsDomainName);
+  DCInfo.forest_name := Utf8ToWideString(DnsForestName);
+  DCInfo.dc_flags := DCFlags;
+  DCInfo.dc_site_name := Utf8ToWideString(DCSiteName);
+  DCInfo.client_site_name := Utf8ToWideString(DCClientSiteName);
+end;
+
+procedure TDJoin.FillOpPackagePartCollection(
+  var OpPackagePartCollection: TOP_PACKAGE_PART_COLLECTION);
+var
+  JoinPart: POP_JOINPROV3_PART;
+begin
+  OpPackagePartCollection.cParts := 2;
+  SetLength(OpPackagePartCollection.pParts, 2);
+
+  OpPackagePartCollection.pParts[0].PartType := GUID_JOIN_PROVIDER;
+  OpPackagePartCollection.pParts[0].ulFlags := 1; // ?
+  New(PODJ_WIN7BLOB(OpPackagePartCollection.pParts[0].Part.pBlob));
+  FillWin7blob(PODJ_WIN7BLOB(OpPackagePartCollection.pParts[0].Part.pBlob)^);
+
+  OpPackagePartCollection.pParts[1].PartType := GUID_JOIN_PROVIDER3;
+  OpPackagePartCollection.pParts[1].ulFlags := 0; // ?
+  New(POP_JOINPROV3_PART(OpPackagePartCollection.pParts[1].Part.pBlob));
+  JoinPart := POP_JOINPROV3_PART(OpPackagePartCollection.pParts[1].Part.pBlob);
+  JoinPart^.Rid := MachineRid;
+  JoinPart^.lpSid := Utf8ToWideString(SidToText(@DomainSID) + '-' + IntToStr(MachineRid));
+end;
+
+procedure TDJoin.SaveToFile(Filename: TFileName);
+var
+  Provision: TODJ_PROVISION_DATA_ctr;
+  Ctx: TNDRPackContext;
+begin
+  FillProvision(Provision.p);
+
+  Ctx := TNDRPackContext.Create;
+  TODJ_PROVISION_DATA_serialized_ptr.NDRPack(Ctx, Provision);
+  FileFromString(Ctx.Buffer, Filename);
 end;
 
 procedure TDJoin.Dump;
@@ -170,7 +255,7 @@ begin
   WriteLn(' - Domain: ', MachineDomainName);
   WriteLn(' - Name: ', MachineName);
   WriteLn(' - Password: ', MachinePassword);
-  WriteLn(' - Sid: ', SidToText(@MachineSid));
+  WriteLn(' - Rid: ', MachineRid);
   WriteLn(' - Site Name: ', DCClientSiteName);
 
   WriteLn(CRLF+'Domain Policy Information:');

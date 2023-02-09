@@ -580,20 +580,24 @@ begin
 end;
 
 procedure TODJ_UNICODE_STRING.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
+var
+  NbChars: PtrInt;
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
-    Ctx.PackUInt16(Length);
-    Ctx.PackUInt16(MaximumLength);
+    NbChars := StrLenW(PWideChar(@Buffer[1]));
+    Ctx.PackUInt16(NbChars * 2);
+    Ctx.PackUInt16((NbChars + 1) * 2);
     Ctx.PackPtr(Pointer(Buffer));
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
   begin
-    Ctx.PackUInt32(MaximumLength div 2);
+    NbChars := StrLenW(PWideChar(@Buffer[1]));
+    Ctx.PackUInt32(NbChars + 1);
     Ctx.PackUInt32(0);
-    Ctx.PackUInt32(Length div 2);
-    Ctx.Pack(@Buffer[1], MaximumLength);
+    Ctx.PackUInt32(NbChars);
+    Ctx.Pack(@Buffer[1], (NbChars + 1) * 2);
   end;
 end;
 
@@ -744,14 +748,14 @@ begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
     Ctx.PackUInt32(UInt32(ulODJFormat));
-    Ctx.PackUInt32(cbBlob);
+    Ctx.PackUInt32(cbBlob);   /// TO COMPUTE
     Ctx.PackPtr(pBlob.RawBytes);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
     if Assigned(pBlob.RawBytes) then
     begin
-      Ctx.PackUInt32(cbBlob);
+      Ctx.PackUInt32(cbBlob);  /// TO COMPUTE
       case ulODJFormat of
         ODJ_WIN7BLOB:
           TODJ_WIN7BLOB_serialized.NDRPack(Ctx, pBlob.Win7Blob^);
