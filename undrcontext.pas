@@ -97,6 +97,7 @@ type
   generic TNDRCustomType<NDRType> = class
     class procedure NDRUnpack(Ctx: TNDRUnpackContext; var Data: NDRType; NDRFormat: UInt32 = NDR_ScalarBuffer);
     class procedure NDRPack(Ctx: TNDRPackContext; var Data: NDRType; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    class function NDRSize(var Data: NDRType; NDRFormat: UInt32 = NDR_ScalarBuffer): SizeUInt;
   end;
 
   { TNDRPointer }
@@ -106,7 +107,11 @@ type
 
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
     procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    function NDRSize(NDRFormat: UInt32 = NDR_ScalarBuffer): SizeUInt;
   end;
+
+  function NDRSidPtrSize(Sid: PSid): SizeUInt;
+  function NDRWideStrSize(WideStr: WideString): SizeUInt;
 
 implementation
 
@@ -119,6 +124,18 @@ const
   EXPECTED_COMMON_HEADER : UInt64 = $cccccccc00081001;
   COMMON_HEADER_FILLER : UInt32 = $CCCCCCCC;
   PRIVATE_HEADER_FILLER: UInt32 = 0;
+
+function NDRSidPtrSize(Sid: PSid): SizeUInt;
+begin
+  if not Assigned(Sid) then
+    Exit(0);
+  Result := 8 + Sizeof(UInt32) * Sid^.SubAuthorityCount;
+end;
+
+function NDRWideStrSize(WideStr: WideString): SizeUInt;
+begin
+  Result := SizeOf(UInt32) * 3 + (StrLenW(PWideChar(@WideStr[1])) + 1) * 2;
+end;
 
 { TNDRContext }
 
@@ -332,6 +349,18 @@ begin
   end;
 end;
 
+class function TNDRCustomType.NDRSize(var Data: NDRType; NDRFormat: UInt32
+  ): SizeUInt;
+begin
+  Result := 0;
+
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Inc(Result, SizeOf(TNDRPrivateHeader));
+    Inc(Result, Data.NDRSize(NDR_ScalarBuffer));
+  end;
+end;
+
 { TNDRPointer }
 
 procedure TNDRPointer.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
@@ -349,6 +378,17 @@ begin
   begin
     Ctx.PackPtr(@p);
     p.NDRPack(Ctx, NDR_ScalarBuffer);
+  end;
+end;
+
+function TNDRPointer.NDRSize(NDRFormat: UInt32): SizeUInt;
+begin
+  Result := 0;
+
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Inc(Result, SizeOf(@p));
+    Inc(Result, p.NDRSize(NDR_ScalarBuffer));
   end;
 end;
 
