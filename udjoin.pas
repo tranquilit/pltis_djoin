@@ -23,29 +23,6 @@ type
   TNDR_Ptr = UInt32;
   TODJ_Format = (ODJ_WIN7BLOB = 1, OP_PACKAGE = 2);
 
-  { TNDR_Context }
-
-  TNDR_Context = class
-  public
-    Buffer: Pointer;
-    BufferLength: SizeInt;
-    Current: SizeInt;
-
-    constructor Create(Buf: Pointer; BufLen: SizeInt);
-
-    procedure ConsumeHeader;
-    function Consume(Size: SizeInt): Pointer;
-    function CurrentPtr: Pointer;
-
-    function UnpackUInt32: UInt32;
-    function UnpackUInt16: UInt16;
-    function UnpackPtr: Pointer;
-    function UnpackGuid: TGuid;
-    function UnpackSidPtr: PSid;
-    function UnpackWideStr: WideString;
-  end;
-  PNDR_Context = ^TNDR_Context;
-
   TCommonTypeHeader = record
     case bool of
       False: (Version: Byte;
@@ -68,10 +45,58 @@ type
   end;
   PNDRPrivateHeader = ^TNDRPrivateHeader;
 
+  { TNDRContext }
+
+  TNDRContext = class
+  protected
+    Buffer: RawByteString;
+    BufferLength: SizeInt;
+    Current: SizeInt;
+  public
+    constructor Create(Buf: RawByteString; BufLen: SizeInt);
+
+    function StartPtr: Pointer;
+    function CurrentPtr: Pointer;
+  end;
+
+  { TNDRUnpackContext }
+
+  TNDRUnpackContext = class(TNDRContext)
+  public
+    constructor Create(Buf: RawByteString; BufLen: SizeInt);
+
+    function Unpack(Size: SizeInt): Pointer;
+    procedure UnpackAlign(Size: SizeInt);
+    function UnpackHeader: TNDRPrivateHeader;
+    function UnpackUInt32: UInt32;
+    function UnpackUInt16: UInt16;
+    function UnpackPtr: Pointer;
+    function UnpackGuid: TGuid;
+    function UnpackSidPtr: PSid;
+    function UnpackWideStr: WideString;
+  end;
+  PNDR_Context = ^TNDRUnpackContext;
+
+  { TNDRPackContext }
+
+  TNDRPackContext = class(TNDRContext)
+  private
+    PointerCount: SizeInt;
+  public
+    constructor Create;
+
+    procedure Pack(Content: Pointer; Len: SizeInt);
+    procedure PackHeader(Size: SizeInt);
+    procedure PackByte(Value: Byte);
+    procedure PackUInt32(Value: UInt32);
+    procedure PackPtr(Value: Pointer);
+  end;
+
   { TNDRCustomType }
 
   generic TNDRCustomType<NDRType> = class
-    class procedure NDRUnpack(Ctx: TNDR_Context; var Data: NDRType; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    class procedure NDRUnpack(Ctx: TNDRUnpackContext; var Data: NDRType; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    class procedure NDRPack(Ctx: TNDRPackContext; var Data: NDRType; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
 
   { TNDRPointer }
@@ -79,7 +104,8 @@ type
   generic TNDRPointer<NDRType> = object
     p: NDRType;
 
-    procedure NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
 
   { TODJ_UNICODE_STRING }
@@ -89,7 +115,7 @@ type
     MaximumLength: UInt16;
     Buffer: WideString;
 
-    procedure NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   PODJ_UNICODE_STRING = ^TODJ_UNICODE_STRING;
 
@@ -99,7 +125,7 @@ type
     cbBlob: UInt32;
     pBlob: PByte;
 
-    procedure NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   POP_BLOB = ^TOP_BLOB;
 
@@ -112,7 +138,7 @@ type
     DomainGuid: TGuid;
     Sid: PSid;
 
-    procedure NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   PODJ_POLICY_DNS_DOMAIN_INFO = ^TODJ_POLICY_DNS_DOMAIN_INFO;
 
@@ -129,7 +155,7 @@ type
     dc_site_name: WideString;
     client_site_name: WideString;
 
-    procedure NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   PDOMAIN_CONTROLLER_INFO = ^TDOMAIN_CONTROLLER_INFO;
 
@@ -144,7 +170,8 @@ type
     DcInfo: TDOMAIN_CONTROLLER_INFO;
     Options: UInt32;
 
-    procedure NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   PODJ_WIN7BLOB = ^TODJ_WIN7BLOB;
   TODJ_WIN7BLOB_serialized = specialize TNDRCustomType<TODJ_WIN7BLOB>;
@@ -155,7 +182,8 @@ type
     Rid: UInt32;
     lpSid: WideString;
 
-    procedure NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   POP_JOINPROV3_PART = ^TOP_JOINPROV3_PART;
   TOP_JOINPROV3_PART_ctr = specialize TNDRPointer<TOP_JOINPROV3_PART>;
@@ -170,7 +198,7 @@ type
     Part: TOP_BLOB;
     Extension: TOP_BLOB;
 
-    procedure NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   POP_PACKAGE_PART = ^TOP_PACKAGE_PART;
 
@@ -181,7 +209,8 @@ type
     pParts: array of TOP_PACKAGE_PART;
     Extension: TOP_BLOB;
 
-    procedure NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   POP_PACKAGE_PART_COLLECTION = ^TOP_PACKAGE_PART_COLLECTION;
   TOP_PACKAGE_PART_COLLECTION_ctr = specialize TNDRPointer<TOP_PACKAGE_PART_COLLECTION>;
@@ -193,7 +222,7 @@ type
     cbBlob: UInt32;
     pPackagePartCollection: POP_PACKAGE_PART_COLLECTION;
 
-    procedure NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   POP_PACKAGE_PART_COLLECTION_blob = ^TOP_PACKAGE_PART_COLLECTION_blob;
 
@@ -206,7 +235,8 @@ type
     cbDecryptedPartCollection: UInt32;
     Extension: TOP_BLOB;
 
-    procedure NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   POP_PACKAGE = ^TOP_PACKAGE;
   TOP_PACKAGE_ctr = specialize TNDRPointer<TOP_PACKAGE>;
@@ -227,7 +257,7 @@ type
     cbBlob: UInt32;
     pBlob: TODJ_BLOB_buffer_u;
 
-    procedure NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   PODJ_BLOB = ^TODJ_BLOB;
 
@@ -238,7 +268,8 @@ type
     ulcBlobs: UInt32;
     pBlobs: array of TODJ_BLOB;
 
-    procedure NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
   end;
   PODJ_PROVISION_DATA = ^TODJ_PROVISION_DATA;
   TODJ_PROVISION_DATA_ctr = specialize TNDRPointer<TODJ_PROVISION_DATA>;
@@ -327,6 +358,7 @@ implementation
 
 const
   EXPECTED_COMMON_HEADER : UInt64 = $cccccccc00081001;
+  COMMON_HEADER_FILLER : UInt32 = $CCCCCCCC;
   PRIVATE_HEADER_FILLER: UInt32 = 0;
 
   GUID_JOIN_PROVIDER : TGUID = '{631c7621-5289-4321-bc9e-80f843f868c3}';
@@ -335,9 +367,28 @@ const
   GUID_CERT_PROVIDER : TGUID = '{9c0971e9-832f-4873-8e87-ef1419d4781e}';
   GUID_POLICY_PROVIDER : TGUID = '{68fb602a-0c09-48ce-b75f-07b7bd58f7ec}';
 
+{ TNDRContext }
+
+constructor TNDRContext.Create(Buf: RawByteString; BufLen: SizeInt);
+begin
+  Buffer := Buf;
+  BufferLength := BufLen;
+  Current := 0;
+end;
+
+function TNDRContext.StartPtr: Pointer;
+begin
+  Result := @Buffer[1];
+end;
+
+function TNDRContext.CurrentPtr: Pointer;
+begin
+  Result := StartPtr + Current;
+end;
+
 { TOP_JOINPROV3_PART }
 
-procedure TOP_JOINPROV3_PART.NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32);
+procedure TOP_JOINPROV3_PART.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
@@ -350,12 +401,18 @@ begin
     lpSid := Ctx.UnpackWideStr;
 end;
 
+procedure TOP_JOINPROV3_PART.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
+begin
+
+end;
+
 { TOP_PACKAGE_PART }
 
-procedure TOP_PACKAGE_PART.NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32);
+procedure TOP_PACKAGE_PART.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
 var
   Size: UInt32;
   JoinProv: TOP_JOINPROV3_PART_ctr;
+  PreviousOffset: SizeInt;
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
@@ -370,6 +427,7 @@ begin
     if Assigned(Part.pBlob) then
     begin
       Size := Ctx.UnpackUInt32;
+      PreviousOffset := Ctx.Current;
       if Size <> Part.cbBlob then
         raise Exception.CreateFmt('Expected blob size and actual size differs: %d - %d', [Part.cbBlob, Size]);
       // Allocate Memory -> TO FREE
@@ -383,13 +441,14 @@ begin
         TOP_JOINPROV3_PART_serialized_ptr.NDRUnpack(Ctx, JoinProv);
         POP_JOINPROV3_PART(Part.pBlob)^ := JoinProv.p;
       end;
+      Ctx.Current := PreviousOffset + Size;
     end;
   end;
 end;
 
 { TOP_PACKAGE_PART_COLLECTION }
 
-procedure TOP_PACKAGE_PART_COLLECTION.NDRUnpack(Ctx: TNDR_Context;
+procedure TOP_PACKAGE_PART_COLLECTION.NDRUnpack(Ctx: TNDRUnpackContext;
   NDRFormat: UInt32);
 var
   NbParts: UInt32;
@@ -412,13 +471,19 @@ begin
     for i := 0 to NbParts - 1 do
       pParts[i].NDRUnpack(Ctx, NDR_Buffer);
     // Extension
-    Ctx.Consume(8);
+    Ctx.Unpack(8);
   end;
+end;
+
+procedure TOP_PACKAGE_PART_COLLECTION.NDRPack(Ctx: TNDRPackContext;
+  NDRFormat: UInt32);
+begin
+
 end;
 
 { TOP_PACKAGE_PART_COLLECTION_blob }
 
-procedure TOP_PACKAGE_PART_COLLECTION_blob.NDRUnpack(Ctx: TNDR_Context;
+procedure TOP_PACKAGE_PART_COLLECTION_blob.NDRUnpack(Ctx: TNDRUnpackContext;
   NDRFormat: UInt32);
 var
   OpPackagePart: TOP_PACKAGE_PART_COLLECTION_ctr;
@@ -447,7 +512,7 @@ end;
 
 { TOP_BLOB }
 
-procedure TOP_BLOB.NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32);
+procedure TOP_BLOB.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
 var
   Size: UInt32;
 begin
@@ -466,13 +531,13 @@ begin
       // Allocate Memory -> TO FREE
       pBlob := GetMem(Size);
       FillZero(pBlob^, Size);
-      Move(PByte(Ctx.Consume(Size))^, pBlob, Size);
+      Move(PByte(Ctx.Unpack(Size))^, pBlob, Size);
     end;
 end;
 
 { TOP_PACKAGE }
 
-procedure TOP_PACKAGE.NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32);
+procedure TOP_PACKAGE.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
@@ -492,9 +557,14 @@ begin
   end;
 end;
 
+procedure TOP_PACKAGE.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
+begin
+
+end;
+
 { TDOMAIN_CONTROLLER_INFO }
 
-procedure TDOMAIN_CONTROLLER_INFO.NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32
+procedure TDOMAIN_CONTROLLER_INFO.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32
   );
 begin
     if (NDRFormat and NDR_Scalar) > 0 then
@@ -529,7 +599,7 @@ end;
 
 { TODJ_UNICODE_STRING }
 
-procedure TODJ_UNICODE_STRING.NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32);
+procedure TODJ_UNICODE_STRING.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
 var
   Len: UInt32;
 begin
@@ -552,13 +622,13 @@ begin
     Len := Len + (Len mod 2);
 
     SetLength(Buffer, Len);
-    Move(PWideChar(Ctx.Consume(Len * 2))^, Buffer[1], Len * 2);
+    Move(PWideChar(Ctx.Unpack(Len * 2))^, Buffer[1], Len * 2);
   end;
 end;
 
 { TODJ_POLICY_DNS_DOMAIN_INFO }
 
-procedure TODJ_POLICY_DNS_DOMAIN_INFO.NDRUnpack(Ctx: TNDR_Context;
+procedure TODJ_POLICY_DNS_DOMAIN_INFO.NDRUnpack(Ctx: TNDRUnpackContext;
   NDRFormat: UInt32);
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
@@ -582,7 +652,7 @@ end;
 
 { TNDRPointer }
 
-procedure TNDRPointer.NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32);
+procedure TNDRPointer.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
@@ -591,9 +661,18 @@ begin
   end;
 end;
 
+procedure TNDRPointer.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackPtr(@p);
+    p.NDRPack(Ctx, NDR_ScalarBuffer);
+  end;
+end;
+
 { TODJ_WIN7BLOB }
 
-procedure TODJ_WIN7BLOB.NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32);
+procedure TODJ_WIN7BLOB.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
@@ -620,12 +699,18 @@ begin
   end;
 end;
 
+procedure TODJ_WIN7BLOB.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
+begin
+
+end;
+
 { TODJ_BLOB }
 
-procedure TODJ_BLOB.NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32);
+procedure TODJ_BLOB.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
 var
   Size: UInt32;
   TempOpPackage: TOP_PACKAGE_ctr;
+  PreviousOffset: SizeInt;
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
@@ -638,6 +723,7 @@ begin
     if Assigned(pBlob.RawBytes) then
     begin
       Size := Ctx.UnpackUInt32;
+      PreviousOffset := Ctx.Current;
       if Size <> cbBlob then
         raise Exception.CreateFmt('Expected blob size and actual size differs: %d - %d', [cbBlob, Size]);
       // Allocate Memory -> TO FREE
@@ -653,12 +739,13 @@ begin
             pBlob.OPPackage^ := TempOpPackage.p;
           end;
       end;
+      Ctx.Current := PreviousOffset + Size;
     end;
 end;
 
 { TODJ_PROVISION_DATA }
 
-procedure TODJ_PROVISION_DATA.NDRUnpack(Ctx: TNDR_Context; NDRFormat: UInt32);
+procedure TODJ_PROVISION_DATA.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
 var
   i: Integer;
   NbBlobs: UInt32;
@@ -686,30 +773,36 @@ begin
   end;
 end;
 
-{ TNDR_Context }
-
-constructor TNDR_Context.Create(Buf: Pointer; BufLen: SizeInt);
+procedure TODJ_PROVISION_DATA.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
 begin
-  Buffer := Buf;
-  BufferLength := BufLen;
-  Current := 0;
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackUInt32(Version);
+    Ctx.PackUInt32(ulcBlobs);
+    Ctx.PackPtr(Pointer(Length(pBlobs)));
+  end;
 end;
 
-procedure TNDR_Context.ConsumeHeader;
+{ TNDRUnpackContext }
+
+constructor TNDRUnpackContext.Create(Buf: RawByteString; BufLen: SizeInt);
+begin
+  inherited Create(Buf, BufLen);
+end;
+
+function TNDRUnpackContext.UnpackHeader: TNDRPrivateHeader;
 var
   Header: PNDRPrivateHeader;
   Valid: Boolean;
 begin
-  Header := PNDRPrivateHeader(CurrentPtr);
-  if not  ((Header^.CommonHeader.Header = EXPECTED_COMMON_HEADER) and
-           (Header^.PrivateHeader.ObjectBufferLength <= BufferLength - sizeof(Header^)) and
-           (Header^.PrivateHeader.Filler = PRIVATE_HEADER_FILLER)) then
-    raise Exception.CreateFmt('Invalid Custom NDR Header at 0x%x', [Current]);
-  if Valid then
-    Consume(SizeOf(Header^));
+  Result := PNDRPrivateHeader(Unpack(SizeOf(Result)))^;
+  if not  ((Result.CommonHeader.Header = EXPECTED_COMMON_HEADER) and
+           (Result.PrivateHeader.ObjectBufferLength <= BufferLength - sizeof(Result)) and
+           (Result.PrivateHeader.Filler = PRIVATE_HEADER_FILLER)) then
+    raise Exception.CreateFmt('Invalid Custom NDR Header at 0x%x', [Current - SizeOf(Result)]);
 end;
 
-function TNDR_Context.Consume(Size: SizeInt): Pointer;
+function TNDRUnpackContext.Unpack(Size: SizeInt): Pointer;
 begin
   Result := CurrentPtr;
   Inc(Current, Size);
@@ -717,32 +810,62 @@ begin
     raise Exception.Create('NDR context out of bounds');
 end;
 
-function TNDR_Context.CurrentPtr: Pointer;
+constructor TNDRPackContext.Create;
 begin
-  Result := Buffer + Current;
+  inherited Create('', 0);
 end;
 
-function TNDR_Context.UnpackUInt32: UInt32;
+procedure TNDRPackContext.Pack(Content: Pointer; Len: SizeInt);
 begin
-  Result := PUInt32(Consume(SizeOf(UInt32)))^;
+  AppendBufferToRawByteString(Buffer, Content^, Len);
+  Inc(BufferLength, Len);
 end;
 
-function TNDR_Context.UnpackUInt16: UInt16;
+procedure TNDRPackContext.PackHeader(Size: SizeInt);
+var
+  Header: TNDRPrivateHeader;
 begin
- Result := PUInt16(Consume(SizeOf(UInt16)))^;
+  Header.CommonHeader.Version := 1;
+  Header.CommonHeader.Endianness := $10;
+  Header.CommonHeader.Length := 8;
+  Header.CommonHeader.Filler := COMMON_HEADER_FILLER;
+
+  Header.PrivateHeader.ObjectBufferLength := Size;
+  Header.PrivateHeader.Filler := PRIVATE_HEADER_FILLER;
+  Pack(@Header, SizeOf(Header));
 end;
 
-function TNDR_Context.UnpackPtr: Pointer;
+procedure TNDRPackContext.PackByte(Value: Byte);
+begin
+  Pack(@Value, SizeOf(Value));
+end;
+
+procedure TNDRUnpackContext.UnpackAlign(Size: SizeInt);
+begin
+  Current := (Current + Size - 1) and (not (Size - 1));
+end;
+
+function TNDRUnpackContext.UnpackUInt32: UInt32;
+begin
+  Result := PUInt32(Unpack(SizeOf(UInt32)))^;
+end;
+
+function TNDRUnpackContext.UnpackUInt16: UInt16;
+begin
+ Result := PUInt16(Unpack(SizeOf(UInt16)))^;
+end;
+
+function TNDRUnpackContext.UnpackPtr: Pointer;
 begin
   Result := Pointer(UnpackUInt32);
 end;
 
-function TNDR_Context.UnpackGuid: TGuid;
+function TNDRUnpackContext.UnpackGuid: TGuid;
 begin
-  Result := PGuid(Consume(SizeOf(TGuid)))^;
+  Result := PGuid(Unpack(SizeOf(TGuid)))^;
 end;
 
-function TNDR_Context.UnpackSidPtr: PSid;
+function TNDRUnpackContext.UnpackSidPtr: PSid;
 var
   NbAuth, Len: UInt32;
 begin
@@ -750,10 +873,10 @@ begin
   Len := 8 + Sizeof(UInt32) * NbAuth;
   /// TO FREE
   Result := GetMem(Len);
-  Move(PSid(Consume(Len))^, Result^, Len);
+  Move(PSid(Unpack(Len))^, Result^, Len);
 end;
 
-function TNDR_Context.UnpackWideStr: WideString;
+function TNDRUnpackContext.UnpackWideStr: WideString;
 var
   Len: UInt32;
 begin
@@ -766,19 +889,57 @@ begin
   Len := Len + (Len mod 2);
 
   SetLength(Result, Len);
-  Move(PWideChar(Consume(Len * 2))^, Result[1], Len * 2)
+  Move(PWideChar(Unpack(Len * 2))^, Result[1], Len * 2);
+end;
+
+procedure TNDRPackContext.PackUInt32(Value: UInt32);
+begin
+  Pack(@Value, SizeOf(Value));
+end;
+
+procedure TNDRPackContext.PackPtr(Value: Pointer);
+var
+  PtrVal: UInt32;
+begin
+  PtrVal := 0;
+  if Assigned(Value) then
+  begin
+    PtrVal := (PointerCount * 4) or $00020000;
+    Inc(PointerCount);
+  end;
+  PackUInt32(PtrVal);
 end;
 
 { TNDRCustomType }
 
-class procedure TNDRCustomType.NDRUnpack(Ctx: TNDR_Context;
+class procedure TNDRCustomType.NDRUnpack(Ctx: TNDRUnpackContext;
   var Data: NDRType; NDRFormat: UInt32);
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
-    Ctx.ConsumeHeader;
+    Ctx.UnpackHeader;
     // Object pointer
     Data.NDRUnpack(Ctx, NDR_ScalarBuffer);
+  end;
+end;
+
+class procedure TNDRCustomType.NDRPack(Ctx: TNDRPackContext; var Data: NDRType;
+  NDRFormat: UInt32);
+var
+  PreviousOffset: SizeInt;
+  SubCtx: TNDRPackContext;
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    PreviousOffset := Ctx.Current;
+    SubCtx := TNDRPackContext.Create;
+    try
+      Data.NDRPack(SubCtx, NDR_ScalarBuffer);
+      Ctx.PackHeader(SubCtx.BufferLength);
+      Ctx.Pack(SubCtx.StartPtr, SubCtx.BufferLength);
+    finally
+      SubCtx.Free;
+    end;
   end;
 end;
 
@@ -885,11 +1046,16 @@ end;
 class function TDJoinParser.ParseBinary(Binary: RawByteString; out DJoin: TDJoin
   ): Boolean;
 var
-  NdrCtx: TNDR_Context;
+  NdrCtx: TNDRUnpackContext;
+  OutCtx: TNDRPackContext;
   ProvData: TODJ_PROVISION_DATA_ctr;
 begin
-  NdrCtx := TNDR_Context.Create(@Binary[1], Length(Binary));
+  NdrCtx := TNDRUnpackContext.Create(Binary, Length(Binary));
   TODJ_PROVISION_DATA_serialized_ptr.NDRUnpack(NdrCtx, ProvData);
+
+  OutCtx :=  TNDRPackContext.Create;
+  TODJ_PROVISION_DATA_serialized_ptr.NDRPack(OutCtx, ProvData);
+  FileFromString(OutCtx.Buffer, 'C:\temp\out.bin');
 
   Result := DJoin.LoadFromProvisionData(ProvData.p);
 end;
