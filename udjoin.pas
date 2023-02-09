@@ -218,6 +218,7 @@ var
 begin
   OpPackagePartCollection.cParts := 2;
   SetLength(OpPackagePartCollection.pParts, 2);
+  FillZero(OpPackagePartCollection.Extension, SizeOf(TOP_BLOB));
 
   OpPackagePartCollection.pParts[0].PartType := GUID_JOIN_PROVIDER;
   OpPackagePartCollection.pParts[0].ulFlags := 1; // ?
@@ -236,12 +237,19 @@ procedure TDJoin.SaveToFile(Filename: TFileName);
 var
   Provision: TODJ_PROVISION_DATA_ctr;
   Ctx: TNDRPackContext;
+  Base64, WideStr: RawByteString;
 begin
   FillProvision(Provision.p);
 
   Ctx := TNDRPackContext.Create;
   TODJ_PROVISION_DATA_serialized_ptr.NDRPack(Ctx, Provision);
-  FileFromString(Ctx.Buffer, Filename);
+
+  Base64 := BinToBase64(Ctx.Buffer);
+  WideStr := Utf8DecodeToUnicodeRawByteString(PUtf8Char(@Base64[1]), Length(Base64));
+  // Insert BOM
+  Insert(#$ff#$fe, WideStr, 0);
+  AppendBufferToRawByteString(WideStr, #0#0);
+  FileFromString(WideStr, Filename);
 end;
 
 procedure TDJoin.Dump;
@@ -279,16 +287,10 @@ class function TDJoinParser.ParseBinary(Binary: RawByteString; out DJoin: TDJoin
   ): Boolean;
 var
   NdrCtx: TNDRUnpackContext;
-  OutCtx: TNDRPackContext;
   ProvData: TODJ_PROVISION_DATA_ctr;
 begin
-  FileFromString(Binary, 'C:\temp\in.bin');
   NdrCtx := TNDRUnpackContext.Create(Binary, Length(Binary));
   TODJ_PROVISION_DATA_serialized_ptr.NDRUnpack(NdrCtx, ProvData);
-
-  OutCtx :=  TNDRPackContext.Create;
-  TODJ_PROVISION_DATA_serialized_ptr.NDRPack(OutCtx, ProvData);
-  FileFromString(OutCtx.Buffer, 'C:\temp\out.bin');
 
   Result := DJoin.LoadFromProvisionData(ProvData.p);
 end;

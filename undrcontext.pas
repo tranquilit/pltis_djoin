@@ -332,20 +332,15 @@ end;
 class procedure TNDRCustomType.NDRPack(Ctx: TNDRPackContext; var Data: NDRType;
   NDRFormat: UInt32);
 var
-  PreviousOffset: SizeInt;
-  SubCtx: TNDRPackContext;
+  PreviousPtrCount: SizeInt;
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
-    PreviousOffset := Ctx.Current;
-    SubCtx := TNDRPackContext.Create;
-    try
-      Data.NDRPack(SubCtx, NDR_ScalarBuffer);
-      Ctx.PackHeader(SubCtx.BufferLength);
-      Ctx.Pack(SubCtx.StartPtr, SubCtx.BufferLength);
-    finally
-      SubCtx.Free;
-    end;
+    Ctx.PackHeader(Data.NDRSize(NDR_ScalarBuffer));
+    PreviousPtrCount := Ctx.PointerCount;
+    Ctx.PointerCount := 0;
+    Data.NDRPack(Ctx, NDR_ScalarBuffer);
+    Ctx.PointerCount := PreviousPtrCount;
   end;
 end;
 

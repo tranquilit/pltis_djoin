@@ -2,6 +2,8 @@ program djointest;
 
 uses
   uDJoin,
+  uDJoinTypes,
+  uNDRContext,
   mormot.core.base,
   mormot.core.os;
 
@@ -12,7 +14,7 @@ var
   TempSid: TSid;
 begin
   Domain := 'aleroux.lan';
-  Machine := 'test-al1$';
+  Machine := 'test-join';
   DC := '\\bullseyex64.aleroux.lan';
   Addr :=  '\\10.10.3.171';
 
@@ -21,7 +23,7 @@ begin
     MachineDomainName := Domain;
     MachineName := Machine;
     MachinePassword := Machine;
-    MachineRid := 1131;
+    MachineRid := 1136;
     Options := 6; // ?
 
     PolicyDomainName := 'ALEROUX';
@@ -39,7 +41,7 @@ begin
     DCClientSiteName := 'Default-First-Site-Name';
 
     Dump;
-    SaveToFile('C:\temp\lazjoin.bin');
+    SaveToFile('C:\temp\lazjoin.txt');
 
   finally
     Free;

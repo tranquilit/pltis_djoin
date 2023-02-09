@@ -125,6 +125,7 @@ type
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
     procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
     function NDRSize(NDRFormat: UInt32 = NDR_ScalarBuffer): SizeUInt;
+    function NDRSize_PartBlob: SizeUInt;
   end;
   POP_PACKAGE_PART = ^TOP_PACKAGE_PART;
 
@@ -152,6 +153,7 @@ type
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
     procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
     function NDRSize(NDRFormat: UInt32 = NDR_ScalarBuffer): SizeUInt;
+    function NDRSize_blob: SizeUInt;
   end;
   POP_PACKAGE_PART_COLLECTION_blob = ^TOP_PACKAGE_PART_COLLECTION_blob;
 
@@ -190,6 +192,7 @@ type
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
     procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
     function NDRSize(NDRFormat: UInt32 = NDR_ScalarBuffer): SizeUInt;
+    function NDRSize_pBlob: SizeUInt;
   end;
   PODJ_BLOB = ^TODJ_BLOB;
 
@@ -312,6 +315,7 @@ begin
   begin
     Ctx.PackGuid(PartType);
     Ctx.PackUInt32(ulFlags);
+    Part.cbBlob := NDRSize_PartBlob;
     Part.NDRPack(Ctx, NDR_Scalar);
     Extension.NDRPack(Ctx, NDR_Scalar);
   end;
@@ -320,7 +324,7 @@ begin
   begin
     if Assigned(Part.pBlob) then
     begin
-      Ctx.PackUInt32(Part.cbBlob);
+      Ctx.PackUInt32(NDRSize_PartBlob);
 
       if IsEqualGuid(PartType, GUID_JOIN_PROVIDER) then
         TODJ_WIN7BLOB_serialized.NDRPack(Ctx, PODJ_WIN7BLOB(Part.pBlob)^)
@@ -334,8 +338,6 @@ begin
 end;
 
 function TOP_PACKAGE_PART.NDRSize(NDRFormat: UInt32): SizeUInt;
-var
-  JoinProv: TOP_JOINPROV3_PART_ctr;
 begin
   Result := 0;
 
@@ -352,15 +354,23 @@ begin
     if Assigned(Part.pBlob) then
     begin
       Inc(Result, SizeOf(Part.cbBlob));
-
-      if IsEqualGuid(PartType, GUID_JOIN_PROVIDER) then
-        Inc(Result, TODJ_WIN7BLOB_serialized.NDRSize(PODJ_WIN7BLOB(Part.pBlob)^))
-      else if IsEqualGuid(PartType, GUID_JOIN_PROVIDER3) then
-      begin
-        JoinProv.p := POP_JOINPROV3_PART(Part.pBlob)^;
-        Inc(Result, TOP_JOINPROV3_PART_serialized_ptr.NDRSize(JoinProv));
-      end;
+      Inc(Result, NDRSize_PartBlob);
     end;
+  end;
+end;
+
+function TOP_PACKAGE_PART.NDRSize_PartBlob: SizeUInt;
+var
+  JoinProv: TOP_JOINPROV3_PART_ctr;
+begin
+  Result := 0;
+
+  if IsEqualGuid(PartType, GUID_JOIN_PROVIDER) then
+    Inc(Result, TODJ_WIN7BLOB_serialized.NDRSize(PODJ_WIN7BLOB(Part.pBlob)^))
+  else if IsEqualGuid(PartType, GUID_JOIN_PROVIDER3) then
+  begin
+    JoinProv.p := POP_JOINPROV3_PART(Part.pBlob)^;
+    Inc(Result, TOP_JOINPROV3_PART_serialized_ptr.NDRSize(JoinProv));
   end;
 end;
 
@@ -477,22 +487,20 @@ var
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
-    Ctx.PackUInt32(cbBlob);
+    Ctx.PackUInt32(NDRSize_blob);
     Ctx.PackPtr(pPackagePartCollection);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
     if Assigned(pPackagePartCollection) then
     begin
-      Ctx.PackUInt32(cbBlob);
+      Ctx.PackUInt32(NDRSize_blob);
       OpPackagePart.p := pPackagePartCollection^;
       TOP_PACKAGE_PART_COLLECTION_serialized_ptr.NDRPack(Ctx, OpPackagePart);
     end;
 end;
 
 function TOP_PACKAGE_PART_COLLECTION_blob.NDRSize(NDRFormat: UInt32): SizeUInt;
-var
-  OpPackagePart: TOP_PACKAGE_PART_COLLECTION_ctr;
 begin
   Result := 0;
   if (NDRFormat and NDR_Scalar) > 0 then
@@ -505,9 +513,16 @@ begin
     if Assigned(pPackagePartCollection) then
     begin
       Inc(Result, SizeOf(cbBlob));
-      OpPackagePart.p := pPackagePartCollection^;
-      Inc(Result, TOP_PACKAGE_PART_COLLECTION_serialized_ptr.NDRSize(OpPackagePart));
+      Inc(Result, NDRSize_blob);
     end;
+end;
+
+function TOP_PACKAGE_PART_COLLECTION_blob.NDRSize_blob: SizeUInt;
+var
+  OpPackagePart: TOP_PACKAGE_PART_COLLECTION_ctr;
+begin
+  OpPackagePart.p := pPackagePartCollection^;
+  Result := TOP_PACKAGE_PART_COLLECTION_serialized_ptr.NDRSize(OpPackagePart);
 end;
 
 { TOP_BLOB }
@@ -860,7 +875,11 @@ begin
     Inc(Result, DnsDomainName.NDRSize(NDR_Buffer));
     Inc(Result, DnsForestName.NDRSize(NDR_Buffer));
     if Assigned(Sid) then
+    begin
+      // SubAuth count
+      Inc(Result, SizeOf(UInt32));
       Inc(Result, NDRSidPtrSize(Sid))
+    end;
   end;
 end;
 
@@ -992,14 +1011,15 @@ begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
     Ctx.PackUInt32(UInt32(ulODJFormat));
-    Ctx.PackUInt32(cbBlob);   /// TO COMPUTE
+    cbBlob := NDRSize_pBlob;
+    Ctx.PackUInt32(NDRSize_pBlob);
     Ctx.PackPtr(pBlob.RawBytes);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
     if Assigned(pBlob.RawBytes) then
     begin
-      Ctx.PackUInt32(cbBlob);  /// TO COMPUTE
+      Ctx.PackUInt32(NDRSize_pBlob);
       case ulODJFormat of
         ODJ_WIN7BLOB:
           TODJ_WIN7BLOB_serialized.NDRPack(Ctx, pBlob.Win7Blob^);
@@ -1013,8 +1033,6 @@ begin
 end;
 
 function TODJ_BLOB.NDRSize(NDRFormat: UInt32): SizeUInt;
-var
-  TempOpPackage: TOP_PACKAGE_ctr;
 begin
   Result := 0;
 
@@ -1029,17 +1047,24 @@ begin
     if Assigned(pBlob.RawBytes) then
     begin
       Inc(Result, SizeOf(cbBlob));
-
-      case ulODJFormat of
-        ODJ_WIN7BLOB:
-          Inc(Result, TODJ_WIN7BLOB_serialized.NDRSize(pBlob.Win7Blob^));
-        OP_PACKAGE:
-          begin
-            TempOpPackage.p := pBlob.OPPackage^;
-            Inc(Result, TOP_PACKAGE_serialized_ptr.NDRSize(TempOpPackage));
-          end;
-      end;
+      Inc(Result, NDRSize_pBlob);
     end;
+end;
+
+function TODJ_BLOB.NDRSize_pBlob: SizeUInt;
+var
+  TempOpPackage: TOP_PACKAGE_ctr;
+begin
+  Result := 0;
+  case ulODJFormat of
+    ODJ_WIN7BLOB:
+      Inc(Result, TODJ_WIN7BLOB_serialized.NDRSize(pBlob.Win7Blob^));
+    OP_PACKAGE:
+    begin
+      TempOpPackage.p := pBlob.OPPackage^;
+      Inc(Result, TOP_PACKAGE_serialized_ptr.NDRSize(TempOpPackage));
+    end;
+  end;
 end;
 
 { TODJ_PROVISION_DATA }
