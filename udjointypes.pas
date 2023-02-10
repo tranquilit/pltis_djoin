@@ -17,8 +17,29 @@ const
   GUID_CERT_PROVIDER : TGUID = '{9c0971e9-832f-4873-8e87-ef1419d4781e}';
   GUID_POLICY_PROVIDER : TGUID = '{68fb602a-0c09-48ce-b75f-07b7bd58f7ec}';
 
+  DS_PDC_FLAG : UInt32 = $00000001; // DC is PDC of Domain
+  DS_GC_FLAG : UInt32 = $00000004; // DC is a GC of forest
+  DS_LDAP_FLAG : UInt32 = $00000008; // Server supports an LDAP server
+  DS_DS_FLAG : UInt32 = $00000010; // DC supports a DS and is a Domain Controller
+  DS_KDC_FLAG : UInt32 = $00000020; // DC is running KDC service
+  DS_TIMESERV_FLAG : UInt32 = $00000040; // DC is running time service
+  DS_CLOSEST_FLAG : UInt32 = $00000080; // DC is in closest site to client
+  DS_WRITABLE_FLAG : UInt32 = $00000100; // DC has a writable DS
+  DS_GOOD_TIMESERV_FLAG : UInt32 = $00000200; // DC is running time service (and has clock hardware)
+  DS_NDNC_FLAG : UInt32 = $00000400; // DomainName is non-domain NC serviced by the LDAP server
+  DS_SELECT_SECRET_DOMAIN_6_FLAG : UInt32 = $00000800; // DC has some secrets
+  DS_FULL_SECRET_DOMAIN_6_FLAG : UInt32 = $00001000; // DC has all secrets
+  DS_WS_FLAG : UInt32 = $00002000; // DC is running web service
+  DS_PING_FLAGS : UInt32 = $000FFFFF;    // Flags returned on ping
+  DS_DNS_CONTROLLER_FLAG : UInt32 = $20000000; // DomainControllerName is a DNS name
+  DS_DNS_DOMAIN_FLAG : UInt32 = $40000000; // DomainName is a DNS name
+  DS_DNS_FOREST_FLAG : UInt32 = $80000000; // DnsForestName is a DNS name
+
 type
   {$A-} // every record (or object) is packed from now on
+
+  TDS_FLAGS = UInt32;
+  TDS_AddressType = (DS_INET_ADDRESS = 1, DS_NETBIOS_ADDRESS = 2);
 
   TODJ_Format = (ODJ_WIN7BLOB = 1, OP_PACKAGE = 2);
 
@@ -67,11 +88,11 @@ type
   TDOMAIN_CONTROLLER_INFO = object
     dc_unc: WideString;
     dc_address: WideString;
-    dc_address_type: UInt32;
+    dc_address_type: TDS_AddressType;
     domain_guid: TGuid;
     domain_name: WideString;
     forest_name: WideString;
-    dc_flags: UInt32;
+    dc_flags: TDS_FLAGS;
     dc_site_name: WideString;
     client_site_name: WideString;
 
@@ -218,6 +239,7 @@ type
   TODJ_PROVISION_DATA_ctr = specialize TNDRPointer<TODJ_PROVISION_DATA>;
   TODJ_PROVISION_DATA_serialized_ptr = specialize TNDRCustomType<TODJ_PROVISION_DATA_ctr>;
 
+procedure DumpDS_Flags(flags: TDS_FLAGS);
 
 implementation
 
@@ -225,6 +247,27 @@ uses
   mormot.core.buffers,
   mormot.core.unicode,
   mormot.core.base;
+
+procedure DumpDS_Flags(flags: TDS_FLAGS);
+begin
+  WriteLn(Format('Flag: 0x%x', [flags]));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_PDC_FLAG', DS_PDC_FLAG, BoolToStr((Flags and DS_PDC_FLAG) > 0, 'True', 'False'), 'DC is PDC of Domain']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_GC_FLAG', DS_GC_FLAG, BoolToStr((Flags and DS_GC_FLAG) > 0, 'True', 'False'), 'DC is a GC of forest']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_LDAP_FLAG', DS_LDAP_FLAG, BoolToStr((Flags and DS_LDAP_FLAG) > 0, 'True', 'False'), 'Server supports an LDAP server']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_DS_FLAG', DS_DS_FLAG, BoolToStr((Flags and DS_DS_FLAG) > 0, 'True', 'False'), 'DC supports a DS and is a Domain Controller']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_KDC_FLAG', DS_KDC_FLAG, BoolToStr((Flags and DS_KDC_FLAG) > 0, 'True', 'False'), 'DC is running KDC service']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_TIMESERV_FLAG', DS_TIMESERV_FLAG, BoolToStr((Flags and DS_TIMESERV_FLAG) > 0, 'True', 'False'), 'DC is running time service']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_CLOSEST_FLAG', DS_CLOSEST_FLAG, BoolToStr((Flags and DS_CLOSEST_FLAG) > 0, 'True', 'False'), 'DC is in closest site to client']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_WRITABLE_FLAG', DS_WRITABLE_FLAG, BoolToStr((Flags and DS_WRITABLE_FLAG) > 0, 'True', 'False'), 'DC has a writable DS']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_GOOD_TIMESERV_FLAG', DS_GOOD_TIMESERV_FLAG, BoolToStr((Flags and DS_GOOD_TIMESERV_FLAG) > 0, 'True', 'False'), 'DC is running time service (and has clock hardware)']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_NDNC_FLAG', DS_NDNC_FLAG, BoolToStr((Flags and DS_NDNC_FLAG) > 0, 'True', 'False'), 'DomainName is non-domain NC serviced by the LDAP server']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_SELECT_SECRET_DOMAIN_6_FLAG', DS_SELECT_SECRET_DOMAIN_6_FLAG, BoolToStr((Flags and DS_SELECT_SECRET_DOMAIN_6_FLAG) > 0, 'True', 'False'), 'DC has some secrets']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_FULL_SECRET_DOMAIN_6_FLAG', DS_FULL_SECRET_DOMAIN_6_FLAG, BoolToStr((Flags and DS_FULL_SECRET_DOMAIN_6_FLAG) > 0, 'True', 'False'), 'DC has all secrets']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_WS_FLAG', DS_WS_FLAG, BoolToStr((Flags and DS_WS_FLAG) > 0, 'True', 'False'), 'DC is running web service']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_DNS_CONTROLLER_FLAG', DS_DNS_CONTROLLER_FLAG, BoolToStr((Flags and DS_DNS_CONTROLLER_FLAG) > 0, 'True', 'False'), 'DomainControllerName is a DNS name']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_DNS_DOMAIN_FLAG', DS_DNS_DOMAIN_FLAG, BoolToStr((Flags and DS_DNS_DOMAIN_FLAG) > 0, 'True', 'False'), 'DomainName is a DNS name']));
+  WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_DNS_FOREST_FLAG', DS_DNS_FOREST_FLAG, BoolToStr((Flags and DS_DNS_FOREST_FLAG) > 0, 'True', 'False'), 'DnsForestName is a DNS name']));
+end;
 
 { TOP_JOINPROV3_PART }
 
@@ -648,7 +691,7 @@ begin
     Ctx.UnpackPtr;
     // dc_address
     Ctx.UnpackPtr;
-    dc_address_type := Ctx.UnpackUInt32;
+    dc_address_type := TDS_AddressType(Ctx.UnpackUInt32);
     domain_guid := Ctx.UnpackGuid;
     // domain_name
     Ctx.UnpackPtr;
@@ -679,7 +722,7 @@ begin
   begin
     Ctx.PackPtr(Pointer(dc_unc));
     Ctx.PackPtr(Pointer(dc_address));
-    Ctx.PackUInt32(dc_address_type);
+    Ctx.PackUInt32(UInt32(dc_address_type));
     Ctx.PackGuid(domain_guid);
     Ctx.PackPtr(Pointer(domain_name));
     Ctx.PackPtr(Pointer(forest_name));

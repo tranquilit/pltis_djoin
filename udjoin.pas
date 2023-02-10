@@ -32,7 +32,7 @@ type
     // Domain Informations
     fDCName: RawUtf8;
     fDCAddress: RawUtf8;
-    fDCAddressType: UInt32;
+    fDCAddressType: TDS_AddressType;
     fDCDomainName: RawUtf8;
     fDCFlags: UInt32;
     fDCSiteName: RawUtf8;
@@ -74,7 +74,7 @@ type
     // Domain Informations
     property DCName: RawUtf8 read fDCName write fDCName;
     property DCAddress: RawUtf8 read fDCAddress write fDCAddress;
-    property DCAddressType: UInt32 read fDCAddressType write fDCAddressType;
+    property DCAddressType: TDS_AddressType read fDCAddressType write fDCAddressType;
     property DCFlags: UInt32 read fDCFlags write fDCFlags;
     property DCSiteName: RawUtf8 read fDCSiteName write fDCSiteName;
     property DCClientSiteName: RawUtf8 read fDCClientSiteName write fDCClientSiteName;
@@ -85,9 +85,9 @@ type
 
   TDJoinParser = class
   public
-    class function ParseFile(FileName: TFileName; out DJoin: TDJoin): Boolean;
-    class function ParseFileContent(FileContent: RawByteString; out DJoin: TDJoin): Boolean;
-    class function ParseBinary(Binary: RawByteString; out DJoin: TDJoin): Boolean;
+    class function ParseFile(FileName: TFileName; var DJoin: TDJoin): Boolean;
+    class function ParseFileContent(FileContent: RawByteString; var DJoin: TDJoin): Boolean;
+    class function ParseBinary(Binary: RawByteString; var DJoin: TDJoin): Boolean;
   end;
 
 implementation
@@ -280,17 +280,18 @@ begin
   WriteLn(' - Domain GUID: ', DomainGuidStr);
   WriteLn(' - Domain SID: ', SidToText(@DomainSID));
 
+
   WriteLn(CRLF+'Domain Controller Information:');
   WriteLn(' - Name: ', DCName);
   WriteLn(' - Address: ', DCAddress);
-  WriteLn(Format(' - Address Type: 0x%x', [DCAddressType]));
+  WriteLn(' - Address Type: ', DCAddressType, Format(' (%d)', [ DCAddressType]));
   WriteLn(Format(' - Flags: 0x%x', [DCFlags]));
   WriteLn(' - Site Name: ', DCSiteName);
 end;
 
 { TDJoinParser }
 
-class function TDJoinParser.ParseBinary(Binary: RawByteString; out DJoin: TDJoin
+class function TDJoinParser.ParseBinary(Binary: RawByteString; var DJoin: TDJoin
   ): Boolean;
 var
   NdrCtx: TNDRUnpackContext;
@@ -312,14 +313,14 @@ begin
   end;
 end;
 
-class function TDJoinParser.ParseFile(FileName: TFileName; out DJoin: TDJoin
+class function TDJoinParser.ParseFile(FileName: TFileName; var DJoin: TDJoin
   ): Boolean;
 begin
   Result := ParseFileContent(StringFromFile(Filename), DJoin);
 end;
 
-class function TDJoinParser.ParseFileContent(FileContent: RawByteString; out
-  DJoin: TDJoin): Boolean;
+class function TDJoinParser.ParseFileContent(FileContent: RawByteString;
+  var DJoin: TDJoin): Boolean;
 var
   Base64: RawUtf8;
   Binary: RawByteString;
