@@ -33,7 +33,6 @@ type
     fDCName: RawUtf8;
     fDCAddress: RawUtf8;
     fDCAddressType: TDS_AddressType;
-    fDCDomainName: RawUtf8;
     fDCFlags: UInt32;
     fDCSiteName: RawUtf8;
     fDCClientSiteName: RawUtf8;

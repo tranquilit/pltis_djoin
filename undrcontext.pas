@@ -211,9 +211,6 @@ begin
 end;
 
 function TNDRUnpackContext.UnpackHeader: TNDRPrivateHeader;
-var
-  Header: PNDRPrivateHeader;
-  Valid: Boolean;
 begin
   Result := PNDRPrivateHeader(Unpack(SizeOf(Result)))^;
   if not  ((Result.CommonHeader.Header = EXPECTED_COMMON_HEADER) and

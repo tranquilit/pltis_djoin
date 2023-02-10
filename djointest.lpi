@@ -26,28 +26,13 @@
     </RunParams>
     <RequiredPackages>
       <Item>
-        <PackageName Value="mormot2"/>
+        <PackageName Value="DJoin"/>
       </Item>
     </RequiredPackages>
     <Units>
       <Unit>
         <Filename Value="djointest.lpr"/>
         <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="udjoin.pas"/>
-        <IsPartOfProject Value="True"/>
-        <UnitName Value="uDJoin"/>
-      </Unit>
-      <Unit>
-        <Filename Value="udjointypes.pas"/>
-        <IsPartOfProject Value="True"/>
-        <UnitName Value="uDJoinTypes"/>
-      </Unit>
-      <Unit>
-        <Filename Value="undrcontext.pas"/>
-        <IsPartOfProject Value="True"/>
-        <UnitName Value="uNDRContext"/>
       </Unit>
     </Units>
   </ProjectOptions>
