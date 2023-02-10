@@ -133,7 +133,7 @@ type
 
   TOP_PACKAGE_PART_COLLECTION = object
     cParts: UInt32;
-    pParts: array of TOP_PACKAGE_PART;
+    pParts: POP_PACKAGE_PART;
     Extension: TOP_BLOB;
 
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
@@ -201,7 +201,7 @@ type
   TODJ_PROVISION_DATA = object
     Version: UInt32;
     ulcBlobs: UInt32;
-    pBlobs: array of TODJ_BLOB;
+    pBlobs: PODJ_BLOB;
 
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
     procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
@@ -291,9 +291,7 @@ begin
       PreviousOffset := Ctx.Current;
       if Size <> Part.cbBlob then
         raise Exception.CreateFmt('Expected blob size and actual size differs: %d - %d', [Part.cbBlob, Size]);
-      // Allocate Memory -> TO FREE
-      part.pBlob := GetMem(Size);
-      FillZero(part.pBlob^, Size);
+      Part.pBlob := Ctx.MemoryContext^.GetZeroedMem(Size);
 
       if IsEqualGuid(PartType, GUID_JOIN_PROVIDER) then
         TODJ_WIN7BLOB_serialized.NDRUnpack(Ctx, PODJ_WIN7BLOB(Part.pBlob)^)
@@ -385,19 +383,21 @@ begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
     cParts := Ctx.UnpackUInt32;
-    //pParts
-    Ctx.UnpackPtr;
+    pParts := Ctx.UnpackPtr;
     Extension.NDRUnpack(Ctx, NDR_Scalar);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
   begin
-    NbParts := Ctx.UnpackUInt32;
-    SetLength(pParts, NbParts);
-    for i := 0 to NbParts - 1 do
-      pParts[i].NDRUnpack(Ctx, NDR_Scalar);
-    for i := 0 to NbParts - 1 do
-      pParts[i].NDRUnpack(Ctx, NDR_Buffer);
+    if Assigned(pParts) then
+    begin
+      NbParts := Ctx.UnpackUInt32;
+      pParts := Ctx.MemoryContext^.GetMem(NbParts, SizeOf(pParts^));
+      for i := 0 to NbParts - 1 do
+        pParts[i].NDRUnpack(Ctx, NDR_Scalar);
+      for i := 0 to NbParts - 1 do
+        pParts[i].NDRUnpack(Ctx, NDR_Buffer);
+    end;
     // Extension
     Ctx.Unpack(8);
   end;
@@ -411,17 +411,20 @@ begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
     Ctx.PackUInt32(cParts);
-    Ctx.PackPtr(Pointer(Length(pParts)));
+    Ctx.PackPtr(pParts);
     Extension.NDRPack(Ctx, NDR_Scalar);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
   begin
-    Ctx.PackUInt32(cParts);
-    for i := 0 to cParts - 1 do
-      pParts[i].NDRPack(Ctx, NDR_Scalar);
-    for i := 0 to cParts - 1 do
-      pParts[i].NDRPack(Ctx, NDR_Buffer);
+    if Assigned(pParts) then
+    begin
+      Ctx.PackUInt32(cParts);
+      for i := 0 to cParts - 1 do
+        pParts[i].NDRPack(Ctx, NDR_Scalar);
+      for i := 0 to cParts - 1 do
+        pParts[i].NDRPack(Ctx, NDR_Buffer);
+    end;
     //Extension.NDRUnpack(Ctx, NDR_Buffer);
   end;
 end;
@@ -471,9 +474,7 @@ begin
       Size := Ctx.UnpackUInt32;
       if Size <> cbBlob then
         raise Exception.CreateFmt('Expected blob size and actual size differs: %d - %d', [cbBlob, Size]);
-      // Allocate Memory -> TO FREE
-      pPackagePartCollection := GetMem(SizeOf(TOP_PACKAGE_PART_COLLECTION));
-      FillZero(pPackagePartCollection^, SizeOf(TOP_PACKAGE_PART_COLLECTION));
+      pPackagePartCollection := Ctx.MemoryContext^.GetZeroedMem(SizeOf(pPackagePartCollection^));
 
       TOP_PACKAGE_PART_COLLECTION_serialized_ptr.NDRUnpack(Ctx, OpPackagePart);
       pPackagePartCollection^ := OpPackagePart.p;
@@ -543,10 +544,8 @@ begin
       Size := Ctx.UnpackUInt32;
       if Size <> cbBlob then
         raise Exception.CreateFmt('Expected blob size and actual size differs: %d - %d', [cbBlob, Size]);
-      // Allocate Memory -> TO FREE
-      pBlob := GetMem(Size);
-      FillZero(pBlob^, Size);
-      Move(PByte(Ctx.Unpack(Size))^, pBlob, Size);
+      pBlob := Ctx.MemoryContext^.GetMem(Size);
+      Move(PByte(Ctx.Unpack(Size))^, pBlob[0], Size);
     end;
 end;
 
@@ -562,7 +561,7 @@ begin
     if Assigned(pBlob) then
     begin
       Ctx.PackUInt32(cbBlob);
-      Ctx.Pack(pBlob, cbBlob);
+      Ctx.Pack(@pBlob[0], cbBlob);
     end;
 end;
 
@@ -987,9 +986,7 @@ begin
       PreviousOffset := Ctx.Current;
       if Size <> cbBlob then
         raise Exception.CreateFmt('Expected blob size and actual size differs: %d - %d', [cbBlob, Size]);
-      // Allocate Memory -> TO FREE
-      pBlob.RawBytes := GetMem(Size);
-      FillZero(pBlob.RawBytes^, Size);
+      pBlob.RawBytes := Ctx.MemoryContext^.GetZeroedMem(Size);
 
       case ulODJFormat of
         ODJ_WIN7BLOB:
@@ -1078,22 +1075,24 @@ begin
   begin
     Version := Ctx.UnpackUInt32;
     ulcBlobs := Ctx.UnpackUInt32;
-    // Do nothing with this
-    Ctx.UnpackPtr;
+    pBlobs := Ctx.UnpackPtr;
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
   begin
-    NbBlobs := Ctx.UnpackUInt32;
-    SetLength(pBlobs, NbBlobs);
+    if Assigned(pBlobs) then
+    begin
+      NbBlobs := Ctx.UnpackUInt32;
+      pBlobs := Ctx.MemoryContext^.GetMem(NbBlobs, SizeOf(pBlobs^));
 
-    // Scalar Part
-    for i := 0 to NbBlobs - 1 do
-      pBlobs[i].NDRUnpack(Ctx, NDR_Scalar);
+      // Scalar Part
+      for i := 0 to NbBlobs - 1 do
+        pBlobs[i].NDRUnpack(Ctx, NDR_Scalar);
 
-    // Buffer Part
-    for i := 0 to NbBlobs - 1 do
-      pBlobs[i].NDRUnpack(Ctx, NDR_Buffer);
+      // Buffer Part
+      for i := 0 to NbBlobs - 1 do
+        pBlobs[i].NDRUnpack(Ctx, NDR_Buffer);
+    end;
   end;
 end;
 
@@ -1105,7 +1104,7 @@ begin
   begin
     Ctx.PackUInt32(Version);
     Ctx.PackUInt32(ulcBlobs);
-    Ctx.PackPtr(Pointer(Length(pBlobs)));
+    Ctx.PackPtr(pBlobs);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then

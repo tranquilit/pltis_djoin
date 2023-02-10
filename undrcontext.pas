@@ -7,7 +7,8 @@ interface
 uses
   Classes,
   SysUtils,
-  mormot.core.os;
+  mormot.core.os,
+  mormot.core.base;
 
 const
   NDR_Scalar = $1;
@@ -41,6 +42,18 @@ type
   end;
   PNDRPrivateHeader = ^TNDRPrivateHeader;
 
+  { TMemoryContext }
+
+  TMemoryContext = object
+    fMemory: TRawByteStringDynArray;
+
+    function ItemCount: SizeUInt;
+    function GetMem(NbItem: SizeUInt; ItemSize: SizeUint = 1): Pointer;
+    function GetZeroedMem(NbItem: SizeUInt; ItemSize: SizeUint = 1): Pointer;
+    procedure Clear;
+  end;
+  PMemoryContext = ^TMemoryContext;
+
   { TNDRContext }
 
   TNDRContext = class
@@ -58,8 +71,10 @@ type
   { TNDRUnpackContext }
 
   TNDRUnpackContext = class(TNDRContext)
+  private
+    fMemoryContext: PMemoryContext;
   public
-    constructor Create(Buf: RawByteString; BufLen: SizeInt);
+    constructor Create(Buf: RawByteString; BufLen: SizeInt; MemoryContext: PMemoryContext);
 
     function Unpack(Size: SizeInt): Pointer;
     procedure UnpackAlign(Size: SizeInt);
@@ -70,6 +85,8 @@ type
     function UnpackGuid: TGuid;
     function UnpackSidPtr: PSid;
     function UnpackWideStr: WideString;
+
+    property MemoryContext: PMemoryContext read fMemoryContext;
   end;
   PNDR_Context = ^TNDRUnpackContext;
 
@@ -117,8 +134,7 @@ implementation
 
 uses
   mormot.core.buffers,
-  mormot.core.unicode,
-  mormot.core.base;
+  mormot.core.unicode;
 
 const
   EXPECTED_COMMON_HEADER : UInt64 = $cccccccc00081001;
@@ -135,6 +151,32 @@ end;
 function NDRWideStrSize(WideStr: WideString): SizeUInt;
 begin
   Result := SizeOf(UInt32) * 3 + (StrLenW(PWideChar(@WideStr[1])) + 1) * 2;
+end;
+
+{ TMemoryContext }
+
+function TMemoryContext.ItemCount: SizeUInt;
+begin
+  Result := Length(fMemory);
+end;
+
+function TMemoryContext.GetMem(NbItem: SizeUInt; ItemSize: SizeUint): Pointer;
+begin
+  SetLength(fMemory, ItemCount + 1);
+  setLength(fMemory[ItemCount - 1], NbItem * ItemSize);
+  Result := @fMemory[ItemCount - 1][1];
+end;
+
+function TMemoryContext.GetZeroedMem(NbItem: SizeUInt; ItemSize: SizeUint
+  ): Pointer;
+begin
+  Result := GetMem(NbItem, ItemSize);
+  FillZero(Result^, NbItem * ItemSize);
+end;
+
+procedure TMemoryContext.Clear;
+begin
+  SetLength(fMemory, 0);
 end;
 
 { TNDRContext }
@@ -158,9 +200,11 @@ end;
 
 { TNDRUnpackContext }
 
-constructor TNDRUnpackContext.Create(Buf: RawByteString; BufLen: SizeInt);
+constructor TNDRUnpackContext.Create(Buf: RawByteString; BufLen: SizeInt;
+  MemoryContext: PMemoryContext);
 begin
   inherited Create(Buf, BufLen);
+  fMemoryContext := MemoryContext;
 end;
 
 function TNDRUnpackContext.UnpackHeader: TNDRPrivateHeader;
@@ -214,8 +258,7 @@ var
 begin
   NbAuth := UnpackUInt32;
   Len := 8 + Sizeof(UInt32) * NbAuth;
-  /// TO FREE
-  Result := GetMem(Len);
+  Result := MemoryContext^.GetMem(Len);
   Move(PSid(Unpack(Len))^, Result^, Len);
 end;
 

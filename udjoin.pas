@@ -42,11 +42,11 @@ type
     fMachineRid: UInt32;
 
 
-    procedure FillProvision(var ProvisionData: TODJ_PROVISION_DATA);
+    procedure FillProvision(MemCtx: PMemoryContext; var ProvisionData: TODJ_PROVISION_DATA);
     procedure FillWin7blob(var Win7Blob: TODJ_WIN7BLOB);
     procedure FillDnsPolicy(var DnsPolicy: TODJ_POLICY_DNS_DOMAIN_INFO);
     procedure FillDCInfo(var DCInfo: TDOMAIN_CONTROLLER_INFO);
-    procedure FillOpPackagePartCollection(var OpPackagePartCollection: TOP_PACKAGE_PART_COLLECTION);
+    procedure FillOpPackagePartCollection(MemCtx: PMemoryContext; var OpPackagePartCollection: TOP_PACKAGE_PART_COLLECTION);
   public
     constructor Create;
 
@@ -160,23 +160,23 @@ begin
   end;
 end;
 
-procedure TDJoin.FillProvision(var ProvisionData: TODJ_PROVISION_DATA);
+procedure TDJoin.FillProvision(MemCtx: PMemoryContext;
+  var ProvisionData: TODJ_PROVISION_DATA);
 begin
   ProvisionData.Version := 1;
   ProvisionData.ulcBlobs := 2;
-  SetLength(ProvisionData.pBlobs, 2);
+  ProvisionData.pBlobs := MemCtx^.GetMem(2, SizeOf(ProvisionData.pBlobs^));
 
   // Win7
   ProvisionData.pBlobs[0].ulODJFormat := ODJ_WIN7BLOB;
-  New(ProvisionData.pBlobs[0].pBlob.Win7Blob);
+  ProvisionData.pBlobs[0].pBlob.Win7Blob := MemCtx^.GetZeroedMem(SizeOf(ProvisionData.pBlobs[0].pBlob.Win7Blob^));
   FillWin7blob(ProvisionData.pBlobs[0].pBlob.Win7Blob^);
 
   // Win8
   ProvisionData.pBlobs[1].ulODJFormat := OP_PACKAGE;
-  New(ProvisionData.pBlobs[1].pBlob.OPPackage);
-  FillZero(ProvisionData.pBlobs[1].pBlob.OPPackage^, SizeOf(TOP_PACKAGE));
-  New(ProvisionData.pBlobs[1].pBlob.OPPackage^.WrappedPartCollection.pPackagePartCollection);
-  FillOpPackagePartCollection(ProvisionData.pBlobs[1].pBlob.OPPackage^.WrappedPartCollection.pPackagePartCollection^);
+  ProvisionData.pBlobs[1].pBlob.OPPackage := MemCtx^.GetZeroedMem(SizeOf(ProvisionData.pBlobs[1].pBlob.OPPackage^));
+  ProvisionData.pBlobs[1].pBlob.OPPackage^.WrappedPartCollection.pPackagePartCollection := MemCtx^.GetZeroedMem(SizeOf(ProvisionData.pBlobs[1].pBlob.OPPackage^.WrappedPartCollection.pPackagePartCollection^));
+  FillOpPackagePartCollection(MemCtx, ProvisionData.pBlobs[1].pBlob.OPPackage^.WrappedPartCollection.pPackagePartCollection^);
 end;
 
 procedure TDJoin.FillWin7blob(var Win7Blob: TODJ_WIN7BLOB);
@@ -211,23 +211,22 @@ begin
   DCInfo.client_site_name := Utf8ToWideString(DCClientSiteName);
 end;
 
-procedure TDJoin.FillOpPackagePartCollection(
+procedure TDJoin.FillOpPackagePartCollection(MemCtx: PMemoryContext;
   var OpPackagePartCollection: TOP_PACKAGE_PART_COLLECTION);
 var
   JoinPart: POP_JOINPROV3_PART;
 begin
   OpPackagePartCollection.cParts := 2;
-  SetLength(OpPackagePartCollection.pParts, 2);
-  FillZero(OpPackagePartCollection.Extension, SizeOf(TOP_BLOB));
+  OpPackagePartCollection.pParts := MemCtx^.GetMem(2, SizeOf(OpPackagePartCollection.pParts^));
 
   OpPackagePartCollection.pParts[0].PartType := GUID_JOIN_PROVIDER;
   OpPackagePartCollection.pParts[0].ulFlags := 1; // ?
-  New(PODJ_WIN7BLOB(OpPackagePartCollection.pParts[0].Part.pBlob));
+  OpPackagePartCollection.pParts[0].Part.pBlob := MemCtx^.GetZeroedMem(SizeOf(TODJ_WIN7BLOB));
   FillWin7blob(PODJ_WIN7BLOB(OpPackagePartCollection.pParts[0].Part.pBlob)^);
 
   OpPackagePartCollection.pParts[1].PartType := GUID_JOIN_PROVIDER3;
   OpPackagePartCollection.pParts[1].ulFlags := 0; // ?
-  New(POP_JOINPROV3_PART(OpPackagePartCollection.pParts[1].Part.pBlob));
+  OpPackagePartCollection.pParts[1].Part.pBlob := MemCtx^.GetZeroedMem(SizeOf(TOP_JOINPROV3_PART));
   JoinPart := POP_JOINPROV3_PART(OpPackagePartCollection.pParts[1].Part.pBlob);
   JoinPart^.Rid := MachineRid;
   JoinPart^.lpSid := Utf8ToWideString(SidToText(@DomainSID) + '-' + IntToStr(MachineRid));
@@ -238,18 +237,24 @@ var
   Provision: TODJ_PROVISION_DATA_ctr;
   Ctx: TNDRPackContext;
   Base64, WideStr: RawByteString;
+  MemCtx: TMemoryContext;
 begin
-  FillProvision(Provision.p);
+  FillProvision(@MemCtx, Provision.p);
 
   Ctx := TNDRPackContext.Create;
-  TODJ_PROVISION_DATA_serialized_ptr.NDRPack(Ctx, Provision);
+  try
+    TODJ_PROVISION_DATA_serialized_ptr.NDRPack(Ctx, Provision);
 
-  Base64 := BinToBase64(Ctx.Buffer);
-  WideStr := Utf8DecodeToUnicodeRawByteString(PUtf8Char(@Base64[1]), Length(Base64));
-  // Insert BOM
-  Insert(#$ff#$fe, WideStr, 0);
-  AppendBufferToRawByteString(WideStr, #0#0);
-  FileFromString(WideStr, Filename);
+    Base64 := BinToBase64(Ctx.Buffer);
+    WideStr := Utf8DecodeToUnicodeRawByteString(PUtf8Char(@Base64[1]), Length(Base64));
+    // Insert BOM
+    Insert(#$ff#$fe, WideStr, 0);
+    AppendBufferToRawByteString(WideStr, #0#0);
+    FileFromString(WideStr, Filename);
+  finally
+    Ctx.Free;
+    MemCtx.Clear;
+  end;
 end;
 
 procedure TDJoin.Dump;
@@ -288,11 +293,21 @@ class function TDJoinParser.ParseBinary(Binary: RawByteString; out DJoin: TDJoin
 var
   NdrCtx: TNDRUnpackContext;
   ProvData: TODJ_PROVISION_DATA_ctr;
+  MemCtx: TMemoryContext;
 begin
-  NdrCtx := TNDRUnpackContext.Create(Binary, Length(Binary));
-  TODJ_PROVISION_DATA_serialized_ptr.NDRUnpack(NdrCtx, ProvData);
+  NdrCtx := TNDRUnpackContext.Create(Binary, Length(Binary), @MemCtx);
+  try
+    try
+      TODJ_PROVISION_DATA_serialized_ptr.NDRUnpack(NdrCtx, ProvData);
 
-  Result := DJoin.LoadFromProvisionData(ProvData.p);
+      Result := DJoin.LoadFromProvisionData(ProvData.p);
+    except
+      Result := False;
+    end;
+  finally
+    NdrCtx.Free;
+    MemCtx.Clear;
+  end;
 end;
 
 class function TDJoinParser.ParseFile(FileName: TFileName; out DJoin: TDJoin
