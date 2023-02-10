@@ -12,63 +12,6 @@ uses
   mormot.net.sock,
   mormot.core.text;
 
-const DomGUID: TGUID = '{58691904-1932-4BC4-96A5-552942191D94}';
-
-
-function DNToCannonical(DC: RawUtf8): RawUtf8;
-const
-  DomainComponent = 'DC';
-  OrganizationalUnit = 'OU';
-  CommonName = 'CN';
-var
-  P: PUtf8Char;
-  Domain, OU, Common, PartType, Value: RawUtf8;
-begin
-  P := @DC[1];
-  while Assigned(P) do
-  begin
-    GetNextItemTrimed(P, '=', PartType);
-    GetNextItemTrimed(P, ',', Value);
-
-    if PartType = DomainComponent then
-    begin
-      if Length(Domain) > 0 then
-        Append(Domain, ['.', Value])
-      else
-        Domain := Value;
-    end
-    else if PartType = OrganizationalUnit then
-      Append(OU, ['/', Value])
-    else if PartType = CommonName then
-      Append(Common, ['/', Value]);
-  end;
-  Result := LowerCase(Domain + OU + Common);
-end;
-
-function CreateComputer(ldap: TLdapClient; ComputerName, BaseDN, DN: RawUtf8; Password: SpiUtf8): RawUtf8;
-var
-  PwdU8: SpiUtf8;
-  ComputerDN: RawUtf8;
-  Attributes: TLdapAttributeList;
-  ObjClass: TLdapAttribute;
-begin
-    ComputerDN := 'CN='+ComputerName+',' + DN +','+BaseDN;
-    PwdU8 := '"'+Password+'"';
-
-    Attributes := TLDAPAttributeList.Create;
-    ObjClass := Attributes.Add('objectClass');
-    ObjClass.Add('computer');
-    Attributes.Add('cn').Add(ComputerName);
-    Attributes.Add('sAMAccountName').Add(UpperCase(ComputerName)+'$');
-    Attributes.Add('userAccountControl').Add('4096');
-    Attributes.Add('unicodePwd').Add(Utf8DecodeToUnicodeRawByteString(@PwdU8[1], Length(PwdU8)));
-
-    ldap.Delete(ComputerDN);
-    ldap.Add(ComputerDN, Attributes);
-    Result := ComputerDN;
-    Attributes.Free;
-end;
-
 procedure LdapDjoin(OutputFile: TFileName);
 var
   ldap: TLdapClient;
@@ -77,7 +20,7 @@ var
   Password: SpiUtf8;
   DCObject, ComputerObject, DNObject: TLdapResult;
   Sid: TSid;
-  SidBinary: RawByteString;
+  DomGuid: TGuid;
   Rid: Cardinal;
 begin
   ldap := TLdapClient.Create;
@@ -96,31 +39,32 @@ begin
 
     if ldap.Login and ldap.Bind then
     begin
-      ComputerDN := CreateComputer(ldap, ComputerName, BaseDN, DN, Password);
+      ComputerDN := 'CN='+ComputerName+',' + DN +','+BaseDN;
+      if not ldap.AddComputer(DN +','+BaseDN, ComputerName, Password, True) then
+        raise Exception.CreateFmt('Unable to create computer %s in domain', [ComputerDN]);
 
       Domain := DNToCannonical(BaseDN);
       Addr := '\\'+ldap.TargetHost;
 
       // Computer Object
-      ldap.Search(ComputerDN, False, '', []);
-      ComputerObject := ldap.SearchResult.Items[0];
-      SidBinary := ComputerObject.Attributes.Find('objectSid').GetRaw(0);
-      Move(SidBinary[1], sid, Length(SidBinary));
+      ComputerObject := ldap.SearchFirst(ComputerDN, '', []);
+      if not (Assigned(ComputerObject) and ComputerObject.GetObjectSid(Sid)) then
+        raise Exception.Create('Unable to retreive computer SID');
       Rid := sid.SubAuthority[sid.SubAuthorityCount - 1];
       Dec(sid.SubAuthorityCount);
 
       // DC Object
-      ldap.Search(BaseDN, False, '(primaryGroupID=516)', []);
-      if ldap.SearchResult.Count = 0 then
-        Exit;
-      DCObject := ldap.SearchResult.Items[0];
-      DC := '\\'+DCObject.Attributes.Find('dNSHostName').GetReadable(0);
+      DCObject := ldap.SearchFirst(BaseDN, '(primaryGroupID=516)', []);
+      if not Assigned(DCObject) then
+         raise Exception.Create('Unable to retreive Domain Controller object');
+      DC := '\\'+DCObject.Attributes.Find('dNSHostName').GetReadable;
 
       // Base Dn Object
-      ldap.Search(BaseDN, False, '(distinguishedName='+BaseDN+')', []);
-      DNObject := ldap.SearchResult.Items[0];
-      PolicyDN := DNObject.Attributes.Find('dc').GetReadable(0);
-
+      DNObject := ldap.SearchFirst(BaseDN, '(distinguishedName='+BaseDN+')', []);
+      if not Assigned(DNObject) then
+         raise Exception.Create('Unable to retreive Domain object');
+      PolicyDN := DNObject.Attributes.Find('dc').GetReadable;
+      DomGuid := DNObject.objectGUID^;
 
       with TDJoin.Create do
       try
@@ -143,6 +87,7 @@ begin
         DCSiteName := 'Default-First-Site-Name';
         DCClientSiteName := 'Default-First-Site-Name';
 
+        Dump;
         SaveToFile(OutputFile);
       finally
         Free;
@@ -159,7 +104,6 @@ begin
   try
     LoadFromFile(FileName);
     Dump;
-    DumpDS_Flags(DCFlags);
   finally
     Free;
   end;
@@ -167,6 +111,6 @@ end;
 
 begin
   LdapDjoin('C:\temp\lazjoin.txt');
-  DumpFile('C:\temp\djoin.txt');
+  DumpFile('C:\temp\lazjoin.txt');
 end.
 
