@@ -120,7 +120,10 @@ type
   { TNDRPointer }
 
   generic TNDRPointer<NDRType> = object
-    p: NDRType;
+  type
+    PNDRType = ^NDRType;
+  public
+    p: PNDRType;
 
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
     procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
@@ -404,19 +407,26 @@ end;
 procedure TNDRPointer.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
+    p := Ctx.UnpackPtr;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
   begin
-    if Assigned(Ctx.UnpackPtr) then
-      p.NDRUnpack(Ctx, NDR_ScalarBuffer);
+    if Assigned(p) then
+    begin
+      p := Ctx.MemoryContext^.GetZeroedMem(SizeOf(p^));
+      p^.NDRUnpack(Ctx, NDR_ScalarBuffer);
+    end;
   end;
 end;
 
 procedure TNDRPointer.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
-  begin
-    Ctx.PackPtr(@p);
-    p.NDRPack(Ctx, NDR_ScalarBuffer);
-  end;
+    Ctx.PackPtr(p);
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+    if Assigned(p) then
+      p^.NDRPack(Ctx, NDR_ScalarBuffer);
 end;
 
 function TNDRPointer.NDRSize(NDRFormat: UInt32): SizeUInt;
@@ -424,10 +434,11 @@ begin
   Result := 0;
 
   if (NDRFormat and NDR_Scalar) > 0 then
-  begin
-    Inc(Result, SizeOf(@p));
-    Inc(Result, p.NDRSize(NDR_ScalarBuffer));
-  end;
+    Inc(Result, SizeOf(p));
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+    if Assigned(p) then
+      Inc(Result, p^.NDRSize(NDR_ScalarBuffer));
 end;
 
 end.

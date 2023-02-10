@@ -146,14 +146,14 @@ begin
       end;
       OP_PACKAGE:
       begin
-        OpPackage := Blob.pBlob.OPPackage;
-        PackageParts := OpPackage^.WrappedPartCollection.pPackagePartCollection;
+        OpPackage := Blob.pBlob.OPPackage.p;
+        PackageParts := OpPackage^.WrappedPartCollection.pPackagePartCollection.p;
         for PartId := 0 to PackageParts^.cParts - 1 do
         begin
           Part := PackageParts^.pParts[PartId];
 
           if IsEqualGuid(Part.PartType, GUID_JOIN_PROVIDER3) then
-            MachineRid := POP_JOINPROV3_PART(Part.Part.pBlob)^.Rid;
+            MachineRid := Part.Part.JoinProv3.p^.Rid;
         end;
       end;
     end;
@@ -174,9 +174,9 @@ begin
 
   // Win8
   ProvisionData.pBlobs[1].ulODJFormat := OP_PACKAGE;
-  ProvisionData.pBlobs[1].pBlob.OPPackage := MemCtx^.GetZeroedMem(SizeOf(ProvisionData.pBlobs[1].pBlob.OPPackage^));
-  ProvisionData.pBlobs[1].pBlob.OPPackage^.WrappedPartCollection.pPackagePartCollection := MemCtx^.GetZeroedMem(SizeOf(ProvisionData.pBlobs[1].pBlob.OPPackage^.WrappedPartCollection.pPackagePartCollection^));
-  FillOpPackagePartCollection(MemCtx, ProvisionData.pBlobs[1].pBlob.OPPackage^.WrappedPartCollection.pPackagePartCollection^);
+  ProvisionData.pBlobs[1].pBlob.OPPackage.p := MemCtx^.GetZeroedMem(SizeOf(ProvisionData.pBlobs[1].pBlob.OPPackage.p^));
+  ProvisionData.pBlobs[1].pBlob.OPPackage.p^.WrappedPartCollection.pPackagePartCollection.p := MemCtx^.GetZeroedMem(SizeOf(ProvisionData.pBlobs[1].pBlob.OPPackage.p^.WrappedPartCollection.pPackagePartCollection.p^));
+  FillOpPackagePartCollection(MemCtx, ProvisionData.pBlobs[1].pBlob.OPPackage.p^.WrappedPartCollection.pPackagePartCollection.p^);
 end;
 
 procedure TDJoin.FillWin7blob(var Win7Blob: TODJ_WIN7BLOB);
@@ -221,25 +221,27 @@ begin
 
   OpPackagePartCollection.pParts[0].PartType := GUID_JOIN_PROVIDER;
   OpPackagePartCollection.pParts[0].ulFlags := 1; // ?
-  OpPackagePartCollection.pParts[0].Part.pBlob := MemCtx^.GetZeroedMem(SizeOf(TODJ_WIN7BLOB));
-  FillWin7blob(PODJ_WIN7BLOB(OpPackagePartCollection.pParts[0].Part.pBlob)^);
+  OpPackagePartCollection.pParts[0].Part.RawBytes := MemCtx^.GetZeroedMem(SizeOf(TODJ_WIN7BLOB));
+  FillWin7blob(OpPackagePartCollection.pParts[0].Part.Win7Blob^);
 
   OpPackagePartCollection.pParts[1].PartType := GUID_JOIN_PROVIDER3;
   OpPackagePartCollection.pParts[1].ulFlags := 0; // ?
-  OpPackagePartCollection.pParts[1].Part.pBlob := MemCtx^.GetZeroedMem(SizeOf(TOP_JOINPROV3_PART));
-  JoinPart := POP_JOINPROV3_PART(OpPackagePartCollection.pParts[1].Part.pBlob);
+  OpPackagePartCollection.pParts[1].Part.JoinProv3.p := MemCtx^.GetZeroedMem(SizeOf(TOP_JOINPROV3_PART));
+  JoinPart := OpPackagePartCollection.pParts[1].Part.JoinProv3.p;
   JoinPart^.Rid := MachineRid;
   JoinPart^.lpSid := Utf8ToWideString(SidToText(@DomainSID) + '-' + IntToStr(MachineRid));
 end;
 
 procedure TDJoin.SaveToFile(Filename: TFileName);
 var
+  ProvisionData: TODJ_PROVISION_DATA;
   Provision: TODJ_PROVISION_DATA_ctr;
   Ctx: TNDRPackContext;
   Base64, WideStr: RawByteString;
   MemCtx: TMemoryContext;
 begin
-  FillProvision(@MemCtx, Provision.p);
+  FillProvision(@MemCtx, ProvisionData);
+  Provision.p := @ProvisionData;
 
   Ctx := TNDRPackContext.Create;
   try
@@ -300,7 +302,7 @@ begin
     try
       TODJ_PROVISION_DATA_serialized_ptr.NDRUnpack(NdrCtx, ProvData);
 
-      Result := DJoin.LoadFromProvisionData(ProvData.p);
+      Result := DJoin.LoadFromProvisionData(ProvData.p^);
     except
       Result := False;
     end;

@@ -113,13 +113,20 @@ type
   TOP_JOINPROV3_PART_ctr = specialize TNDRPointer<TOP_JOINPROV3_PART>;
   TOP_JOINPROV3_PART_serialized_ptr = specialize TNDRCustomType<TOP_JOINPROV3_PART_ctr>;
 
+  TOP_PACKAGE_PART_u = record
+    case UInt32 of
+      1: (Win7Blob: PODJ_WIN7BLOB);
+      2: (JoinProv3: TOP_JOINPROV3_PART_ctr);
+      3: (RawBytes: PByte);
+  end;
 
   { TOP_PACKAGE_PART }
 
   TOP_PACKAGE_PART = object
     PartType: TGUID;
     ulFlags: UInt32;
-    Part: TOP_BLOB;
+    PartLen: UInt32;
+    Part: TOP_PACKAGE_PART_u;
     Extension: TOP_BLOB;
 
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
@@ -148,7 +155,7 @@ type
 
   TOP_PACKAGE_PART_COLLECTION_blob = object
     cbBlob: UInt32;
-    pPackagePartCollection: POP_PACKAGE_PART_COLLECTION;
+    pPackagePartCollection: TOP_PACKAGE_PART_COLLECTION_ctr;
 
     procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
     procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
@@ -177,7 +184,7 @@ type
   TODJ_BLOB_buffer_u = record
     case UInt32 of
       1: (Win7Blob: PODJ_WIN7BLOB);
-      2: (OPPackage: POP_PACKAGE);
+      2: (OPPackage: TOP_PACKAGE_ctr);
       3: (RawBytes: PByte);
   end;
   PODJ_BLOB_buffer_u = ^TODJ_BLOB_buffer_u;
@@ -272,33 +279,32 @@ end;
 procedure TOP_PACKAGE_PART.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
 var
   Size: UInt32;
-  JoinProv: TOP_JOINPROV3_PART_ctr;
   PreviousOffset: SizeInt;
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
     PartType := Ctx.UnpackGuid;
     ulFlags := Ctx.UnpackUInt32;
-    Part.NDRUnpack(Ctx, NDR_Scalar);
+    PartLen := Ctx.UnpackUInt32;
+    Part.RawBytes := Ctx.UnpackPtr;
     Extension.NDRUnpack(Ctx, NDR_Scalar);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
   begin
-    if Assigned(Part.pBlob) then
+    if Assigned(Part.RawBytes) then
     begin
       Size := Ctx.UnpackUInt32;
       PreviousOffset := Ctx.Current;
-      if Size <> Part.cbBlob then
-        raise Exception.CreateFmt('Expected blob size and actual size differs: %d - %d', [Part.cbBlob, Size]);
-      Part.pBlob := Ctx.MemoryContext^.GetZeroedMem(Size);
+      if Size <> PartLen then
+        raise Exception.CreateFmt('Expected blob size and actual size differs: %d - %d', [PartLen, Size]);
+      Part.RawBytes := Ctx.MemoryContext^.GetZeroedMem(Size);
 
       if IsEqualGuid(PartType, GUID_JOIN_PROVIDER) then
-        TODJ_WIN7BLOB_serialized.NDRUnpack(Ctx, PODJ_WIN7BLOB(Part.pBlob)^)
+        TODJ_WIN7BLOB_serialized.NDRUnpack(Ctx, Part.Win7Blob^)
       else if IsEqualGuid(PartType, GUID_JOIN_PROVIDER3) then
       begin
-        TOP_JOINPROV3_PART_serialized_ptr.NDRUnpack(Ctx, JoinProv);
-        POP_JOINPROV3_PART(Part.pBlob)^ := JoinProv.p;
+        TOP_JOINPROV3_PART_serialized_ptr.NDRUnpack(Ctx, Part.JoinProv3);
       end;
       Ctx.Current := PreviousOffset + Size;
     end;
@@ -306,31 +312,26 @@ begin
 end;
 
 procedure TOP_PACKAGE_PART.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
-var
-  JoinProv: TOP_JOINPROV3_PART_ctr;
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
     Ctx.PackGuid(PartType);
     Ctx.PackUInt32(ulFlags);
-    Part.cbBlob := NDRSize_PartBlob;
-    Part.NDRPack(Ctx, NDR_Scalar);
+    Ctx.PackUInt32(NDRSize_PartBlob);
+    Ctx.PackPtr(Part.RawBytes);
     Extension.NDRPack(Ctx, NDR_Scalar);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
   begin
-    if Assigned(Part.pBlob) then
+    if Assigned(Part.RawBytes) then
     begin
       Ctx.PackUInt32(NDRSize_PartBlob);
 
       if IsEqualGuid(PartType, GUID_JOIN_PROVIDER) then
-        TODJ_WIN7BLOB_serialized.NDRPack(Ctx, PODJ_WIN7BLOB(Part.pBlob)^)
+        TODJ_WIN7BLOB_serialized.NDRPack(Ctx, Part.Win7Blob^)
       else if IsEqualGuid(PartType, GUID_JOIN_PROVIDER3) then
-      begin
-        JoinProv.p := POP_JOINPROV3_PART(Part.pBlob)^;
-        TOP_JOINPROV3_PART_serialized_ptr.NDRPack(Ctx, JoinProv);
-      end;
+        TOP_JOINPROV3_PART_serialized_ptr.NDRPack(Ctx, Part.JoinProv3);
     end;
   end;
 end;
@@ -343,33 +344,29 @@ begin
   begin
     Inc(Result, SizeOf(PartType));
     Inc(Result, SizeOf(ulFlags));
-    Inc(Result, Part.NDRSize(NDR_Scalar));
+    Inc(Result, SizeOf(PartLen));
+    Inc(Result, SizeOf(Part.RawBytes));
     Inc(Result, Extension.NDRSize(NDR_Scalar));
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
   begin
-    if Assigned(Part.pBlob) then
+    if Assigned(Part.RawBytes) then
     begin
-      Inc(Result, SizeOf(Part.cbBlob));
+      Inc(Result, SizeOf(PartLen));
       Inc(Result, NDRSize_PartBlob);
     end;
   end;
 end;
 
 function TOP_PACKAGE_PART.NDRSize_PartBlob: SizeUInt;
-var
-  JoinProv: TOP_JOINPROV3_PART_ctr;
 begin
   Result := 0;
 
   if IsEqualGuid(PartType, GUID_JOIN_PROVIDER) then
-    Inc(Result, TODJ_WIN7BLOB_serialized.NDRSize(PODJ_WIN7BLOB(Part.pBlob)^))
+    Inc(Result, TODJ_WIN7BLOB_serialized.NDRSize(Part.Win7Blob^))
   else if IsEqualGuid(PartType, GUID_JOIN_PROVIDER3) then
-  begin
-    JoinProv.p := POP_JOINPROV3_PART(Part.pBlob)^;
-    Inc(Result, TOP_JOINPROV3_PART_serialized_ptr.NDRSize(JoinProv));
-  end;
+    Inc(Result, TOP_JOINPROV3_PART_serialized_ptr.NDRSize(part.JoinProv3));
 end;
 
 { TOP_PACKAGE_PART_COLLECTION }
@@ -459,45 +456,38 @@ end;
 procedure TOP_PACKAGE_PART_COLLECTION_blob.NDRUnpack(Ctx: TNDRUnpackContext;
   NDRFormat: UInt32);
 var
-  OpPackagePart: TOP_PACKAGE_PART_COLLECTION_ctr;
   Size: UInt32;
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
     cbBlob := Ctx.UnpackUInt32;
-    pPackagePartCollection := Ctx.UnpackPtr;
+    pPackagePartCollection.p := Ctx.UnpackPtr;
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
-    if Assigned(pPackagePartCollection) then
+    if Assigned(pPackagePartCollection.p) then
     begin
       Size := Ctx.UnpackUInt32;
       if Size <> cbBlob then
         raise Exception.CreateFmt('Expected blob size and actual size differs: %d - %d', [cbBlob, Size]);
-      pPackagePartCollection := Ctx.MemoryContext^.GetZeroedMem(SizeOf(pPackagePartCollection^));
-
-      TOP_PACKAGE_PART_COLLECTION_serialized_ptr.NDRUnpack(Ctx, OpPackagePart);
-      pPackagePartCollection^ := OpPackagePart.p;
+      TOP_PACKAGE_PART_COLLECTION_serialized_ptr.NDRUnpack(Ctx, pPackagePartCollection);
     end;
 end;
 
 procedure TOP_PACKAGE_PART_COLLECTION_blob.NDRPack(Ctx: TNDRPackContext;
   NDRFormat: UInt32);
-var
-  OpPackagePart: TOP_PACKAGE_PART_COLLECTION_ctr;
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
     Ctx.PackUInt32(NDRSize_blob);
-    Ctx.PackPtr(pPackagePartCollection);
+    Ctx.PackPtr(pPackagePartCollection.p);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
-    if Assigned(pPackagePartCollection) then
+    if Assigned(pPackagePartCollection.p) then
     begin
       Ctx.PackUInt32(NDRSize_blob);
-      OpPackagePart.p := pPackagePartCollection^;
-      TOP_PACKAGE_PART_COLLECTION_serialized_ptr.NDRPack(Ctx, OpPackagePart);
+      TOP_PACKAGE_PART_COLLECTION_serialized_ptr.NDRPack(Ctx, pPackagePartCollection);
     end;
 end;
 
@@ -511,7 +501,7 @@ begin
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
-    if Assigned(pPackagePartCollection) then
+    if Assigned(pPackagePartCollection.p) then
     begin
       Inc(Result, SizeOf(cbBlob));
       Inc(Result, NDRSize_blob);
@@ -519,11 +509,8 @@ begin
 end;
 
 function TOP_PACKAGE_PART_COLLECTION_blob.NDRSize_blob: SizeUInt;
-var
-  OpPackagePart: TOP_PACKAGE_PART_COLLECTION_ctr;
 begin
-  OpPackagePart.p := pPackagePartCollection^;
-  Result := TOP_PACKAGE_PART_COLLECTION_serialized_ptr.NDRSize(OpPackagePart);
+  Result := TOP_PACKAGE_PART_COLLECTION_serialized_ptr.NDRSize(pPackagePartCollection);
 end;
 
 { TOP_BLOB }
@@ -969,7 +956,6 @@ end;
 procedure TODJ_BLOB.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
 var
   Size: UInt32;
-  TempOpPackage: TOP_PACKAGE_ctr;
   PreviousOffset: SizeInt;
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
@@ -992,18 +978,13 @@ begin
         ODJ_WIN7BLOB:
           TODJ_WIN7BLOB_serialized.NDRUnpack(Ctx, pBlob.Win7Blob^);
         OP_PACKAGE:
-          begin
-            TOP_PACKAGE_serialized_ptr.NDRUnpack(Ctx, TempOpPackage);
-            pBlob.OPPackage^ := TempOpPackage.p;
-          end;
+            TOP_PACKAGE_serialized_ptr.NDRUnpack(Ctx, pBlob.OPPackage);
       end;
       Ctx.Current := PreviousOffset + Size;
     end;
 end;
 
 procedure TODJ_BLOB.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
-var
-  TempOpPackage: TOP_PACKAGE_ctr;
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
@@ -1021,10 +1002,7 @@ begin
         ODJ_WIN7BLOB:
           TODJ_WIN7BLOB_serialized.NDRPack(Ctx, pBlob.Win7Blob^);
         OP_PACKAGE:
-          begin
-            TempOpPackage.p := pBlob.OPPackage^;
-            TOP_PACKAGE_serialized_ptr.NDRPack(Ctx, TempOpPackage);
-          end;
+            TOP_PACKAGE_serialized_ptr.NDRPack(Ctx, pBlob.OPPackage);
       end;
     end;
 end;
@@ -1049,18 +1027,13 @@ begin
 end;
 
 function TODJ_BLOB.NDRSize_pBlob: SizeUInt;
-var
-  TempOpPackage: TOP_PACKAGE_ctr;
 begin
   Result := 0;
   case ulODJFormat of
     ODJ_WIN7BLOB:
       Inc(Result, TODJ_WIN7BLOB_serialized.NDRSize(pBlob.Win7Blob^));
     OP_PACKAGE:
-    begin
-      TempOpPackage.p := pBlob.OPPackage^;
-      Inc(Result, TOP_PACKAGE_serialized_ptr.NDRSize(TempOpPackage));
-    end;
+      Inc(Result, TOP_PACKAGE_serialized_ptr.NDRSize(pBlob.OPPackage));
   end;
 end;
 
