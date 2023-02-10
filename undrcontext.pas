@@ -152,8 +152,11 @@ begin
 end;
 
 function NDRWideStrSize(WideStr: WideString): SizeUInt;
+var
+  SLen: PtrInt;
 begin
-  Result := SizeOf(UInt32) * 3 + (StrLenW(PWideChar(@WideStr[1])) + 1) * 2;
+  SLen := StrLenW(PWideChar(@WideStr[1])) + 1;
+  Result := SizeOf(UInt32) * 3 + (SLen + (SLen mod 2))* 2;
 end;
 
 { TMemoryContext }
@@ -357,6 +360,8 @@ begin
   PackUInt32(0);
   PackUInt32(StringLength);
   Pack(@Value[1], StringLength * 2);
+  if (StringLength mod 2) > 0 then
+    PackUInt16(0);
 end;
 
 { TNDRCustomType }
