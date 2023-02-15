@@ -25,7 +25,7 @@ type
     fMachinePassword: SpiUtf8;
     fOptions: UInt32;
     // Policy DNS Domain
-    fPolicyDomainName: RawUtf8;
+    fNetbiosDomainName: RawUtf8;
     fDnsDomainName: RawUtf8;
     fDnsForestName: RawUtf8;
     fDomainGUID: TGuid;
@@ -67,7 +67,7 @@ type
     property MachineRid: UInt32 read fMachineRid write fMachineRid;
     property Options: UInt32 read fOptions write fOptions;
     // Policy DNS Domain
-    property PolicyDomainName: RawUtf8 read fPolicyDomainName write fPolicyDomainName;
+    property NetbiosDomainName: RawUtf8 read fNetbiosDomainName write fNetbiosDomainName;
     property DnsDomainName: RawUtf8 read fDnsDomainName write fDnsDomainName;
     property DnsForestName: RawUtf8 read fDnsForestName write fDnsForestName;
     property DomainGUID: TGuid read fDomainGUID write fDomainGUID;
@@ -112,7 +112,7 @@ end;
 function TDJoin.LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN,
   BaseDN: RawUtf8; Password: SpiUtf8): Boolean;
 var
-  ComputerDN, Domain, Addr, DC, PolicyDN: RawUtf8;
+  ComputerDN, Domain, Addr, DC, Netbios, DCReference, SiteName: RawUtf8;
   ComputerObject, DCObject, DNObject: TLdapResult;
   Sid: TSid;
   Rid: Cardinal;
@@ -121,6 +121,7 @@ begin
   ComputerDN := 'CN='+ComputerName+',' + DN +','+BaseDN;
 
   Domain := DNToCannonical(BaseDN);
+  Netbios := UpperCase(String(Domain).Split('.')[0]);
   Addr := '\\'+ldap.TargetHost;
 
   // Computer Object
@@ -135,12 +136,13 @@ begin
   if not Assigned(DCObject) then
      raise Exception.Create('Unable to retreive Domain Controller object');
   DC := '\\'+DCObject.Attributes.Find('dNSHostName').GetReadable;
+  DCReference := DCObject.Attributes.Find('serverReferenceBL').GetReadable;
+  SiteName := String(DNToCannonical(DCReference)).Split('/')[3];
 
   // Base Dn Object
   DNObject := ldap.SearchFirst(BaseDN, '(distinguishedName='+BaseDN+')', []);
   if not Assigned(DNObject) then
      raise Exception.Create('Unable to retreive Domain object');
-  PolicyDN := DNObject.Attributes.Find('dc').GetReadable;
   DomGuid := DNObject.objectGUID^;
 
 
@@ -149,9 +151,9 @@ begin
   MachineName := ComputerName;
   MachinePassword := Password;
   MachineRid := Rid;
-  Options := 6; // ?
+  Options := 0;
 
-  PolicyDomainName := PolicyDN;
+  NetbiosDomainName := Netbios;
   DnsDomainName := Domain;
   DnsForestName := Domain;
   DomainGUID := DomGUID;
@@ -161,8 +163,8 @@ begin
   DCAddress := Addr;
   DCAddressType := DS_INET_ADDRESS;
   DCFlags := $E00013FD;
-  DCSiteName := 'Default-First-Site-Name';
-  DCClientSiteName := 'Default-First-Site-Name';
+  DCSiteName := SiteName;
+  DCClientSiteName := SiteName;
 end;
 
 function TDJoin.LoadFromProvisionData(const ProvisionData: TODJ_PROVISION_DATA
@@ -188,7 +190,7 @@ begin
         MachinePassword := WideStringToUtf8(Win7^.lpMachinePassword);
         Options := Win7^.Options;
         /// Policy DNS Domain
-        PolicyDomainName := WideStringToUtf8(Win7^.DnsDomainInfo.Name.Buffer);
+        NetbiosDomainName := WideStringToUtf8(Win7^.DnsDomainInfo.Name.Buffer);
         DnsDomainName := WideStringToUtf8(Win7^.DnsDomainInfo.DnsDomainName.Buffer);
         DnsForestName := WideStringToUtf8(Win7^.DnsDomainInfo.DnsForestName.Buffer);
         DomainGUID := Win7^.DnsDomainInfo.DomainGuid;
@@ -248,7 +250,7 @@ end;
 
 procedure TDJoin.FillDnsPolicy(var DnsPolicy: TODJ_POLICY_DNS_DOMAIN_INFO);
 begin
-  DnsPolicy.Name.Buffer := Utf8ToWideString(PolicyDomainName);
+  DnsPolicy.Name.Buffer := Utf8ToWideString(NetbiosDomainName);
   DnsPolicy.DnsDomainName.Buffer := Utf8ToWideString(DnsDomainName);
   DnsPolicy.DnsForestName.Buffer := Utf8ToWideString(DnsForestName);
   DnsPolicy.DomainGuid := DomainGUID;
@@ -331,7 +333,7 @@ begin
   WriteLn(' - Site Name: ', DCClientSiteName);
 
   WriteLn(CRLF+'Domain Policy Information:');
-  WriteLn(' - Domain Name: ', PolicyDomainName);
+  WriteLn(' - Netbios Domain Name: ', NetbiosDomainName);
   WriteLn(' - DNS Domain Name: ', DnsDomainName);
   WriteLn(' - DNS Forest Name: ', DnsForestName);
   WriteLn(' - Domain GUID: ', DomainGuidStr);
