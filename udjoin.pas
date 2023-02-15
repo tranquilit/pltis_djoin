@@ -9,6 +9,7 @@ uses
   SysUtils,
   mormot.core.os,
   mormot.core.base,
+  mormot.net.ldap,
   uDJoinTypes,
   uNDRContext;
 
@@ -52,6 +53,7 @@ type
     /// Load a DJoin file in memory
     // - Return true if the file has been successfully loaded
     function LoadFromFile(const Filename: TFileName): boolean;
+    function LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN, BaseDN: RawUtf8; Password: SpiUtf8): Boolean;
 
     function LoadFromProvisionData(const ProvisionData: TODJ_PROVISION_DATA): Boolean;
     procedure SaveToFile(Filename: TFileName);
@@ -105,6 +107,62 @@ end;
 function TDJoin.LoadFromFile(const Filename: TFileName): boolean;
 begin
   Result := TDJoinParser.ParseFile(Filename, Self);
+end;
+
+function TDJoin.LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN,
+  BaseDN: RawUtf8; Password: SpiUtf8): Boolean;
+var
+  ComputerDN, Domain, Addr, DC, PolicyDN: RawUtf8;
+  ComputerObject, DCObject, DNObject: TLdapResult;
+  Sid: TSid;
+  Rid: Cardinal;
+  DomGuid: TGuid;
+begin
+  ComputerDN := 'CN='+ComputerName+',' + DN +','+BaseDN;
+
+  Domain := DNToCannonical(BaseDN);
+  Addr := '\\'+ldap.TargetHost;
+
+  // Computer Object
+  ComputerObject := ldap.SearchFirst(ComputerDN, '', []);
+  if not (Assigned(ComputerObject) and ComputerObject.CopyObjectSid(Sid)) then
+    raise Exception.Create('Unable to retreive computer SID');
+  Rid := sid.SubAuthority[sid.SubAuthorityCount - 1];
+  Dec(sid.SubAuthorityCount);
+
+  // DC Object
+  DCObject := ldap.SearchFirst(BaseDN, '(primaryGroupID=516)', []);
+  if not Assigned(DCObject) then
+     raise Exception.Create('Unable to retreive Domain Controller object');
+  DC := '\\'+DCObject.Attributes.Find('dNSHostName').GetReadable;
+
+  // Base Dn Object
+  DNObject := ldap.SearchFirst(BaseDN, '(distinguishedName='+BaseDN+')', []);
+  if not Assigned(DNObject) then
+     raise Exception.Create('Unable to retreive Domain object');
+  PolicyDN := DNObject.Attributes.Find('dc').GetReadable;
+  DomGuid := DNObject.objectGUID^;
+
+
+  // Assign values
+  MachineDomainName := Domain;
+  MachineName := ComputerName;
+  MachinePassword := Password;
+  MachineRid := Rid;
+  Options := 6; // ?
+
+  PolicyDomainName := PolicyDN;
+  DnsDomainName := Domain;
+  DnsForestName := Domain;
+  DomainGUID := DomGUID;
+  DomainSID := sid;
+
+  DCName := DC;
+  DCAddress := Addr;
+  DCAddressType := DS_INET_ADDRESS;
+  DCFlags := $E00013FD;
+  DCSiteName := 'Default-First-Site-Name';
+  DCClientSiteName := 'Default-First-Site-Name';
 end;
 
 function TDJoin.LoadFromProvisionData(const ProvisionData: TODJ_PROVISION_DATA
