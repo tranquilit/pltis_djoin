@@ -57,6 +57,7 @@ type
 
     function LoadFromProvisionData(const ProvisionData: TODJ_PROVISION_DATA): Boolean;
     procedure SaveToFile(Filename: TFileName);
+    function GetBlob: RawByteString;
 
     procedure Dump;
 
@@ -291,6 +292,11 @@ begin
 end;
 
 procedure TDJoin.SaveToFile(Filename: TFileName);
+begin
+  FileFromString(GetBlob, Filename);
+end;
+
+function TDJoin.GetBlob: RawByteString;
 var
   ProvisionData: TODJ_PROVISION_DATA;
   Provision: TODJ_PROVISION_DATA_ctr;
@@ -298,6 +304,7 @@ var
   Base64, WideStr: RawByteString;
   MemCtx: TMemoryContext;
 begin
+  Result := '';
   FillProvision(@MemCtx, ProvisionData);
   Provision.p := @ProvisionData;
 
@@ -306,11 +313,10 @@ begin
     TODJ_PROVISION_DATA_serialized_ptr.NDRPack(Ctx, Provision);
 
     Base64 := BinToBase64(Ctx.Buffer);
-    WideStr := Utf8DecodeToUnicodeRawByteString(PUtf8Char(@Base64[1]), Length(Base64));
+    Result := Utf8DecodeToUnicodeRawByteString(PUtf8Char(@Base64[1]), Length(Base64));
     // Insert BOM
-    Insert(#$ff#$fe, WideStr, 0);
-    AppendBufferToRawByteString(WideStr, #0#0);
-    FileFromString(WideStr, Filename);
+    Insert(#$ff#$fe, Result, 0);
+    AppendBufferToRawByteString(Result, #0#0);
   finally
     Ctx.Free;
     MemCtx.Clear;
