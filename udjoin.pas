@@ -120,7 +120,7 @@ var
 begin
   ComputerDN := 'CN='+ComputerName+',' + DN +','+BaseDN;
 
-  Domain := DNToCannonical(BaseDN);
+  Domain := DNToCN(BaseDN);
   Netbios := UpperCase(String(Domain).Split('.')[0]);
   Addr := '\\'+ldap.TargetHost;
 
@@ -137,13 +137,12 @@ begin
      raise Exception.Create('Unable to retreive Domain Controller object');
   DC := '\\'+DCObject.Attributes.Find('dNSHostName').GetReadable;
   DCReference := DCObject.Attributes.Find('serverReferenceBL').GetReadable;
-  SiteName := String(DNToCannonical(DCReference)).Split('/')[3];
+  SiteName := String(DNToCN(DCReference)).Split('/')[3];
 
   // Base Dn Object
   DNObject := ldap.SearchFirst(BaseDN, '(distinguishedName='+BaseDN+')', []);
-  if not Assigned(DNObject) then
+  if not Assigned(DNObject) or not DNObject.CopyObjectGUID(DomGuid) then
      raise Exception.Create('Unable to retreive Domain object');
-  DomGuid := DNObject.objectGUID^;
 
 
   // Assign values
