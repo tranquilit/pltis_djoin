@@ -96,7 +96,8 @@ implementation
 
 uses
   mormot.core.buffers,
-  mormot.core.unicode;
+  mormot.core.unicode,
+  mormot.core.text;
 
 { TDJoin }
 
@@ -292,8 +293,14 @@ begin
 end;
 
 procedure TDJoin.SaveToFile(Filename: TFileName);
+var
+  Blob: RawByteString;
 begin
-  FileFromString(GetBlob, Filename);
+  Blob := GetBlob;
+  // Insert BOM
+  Insert(#$ff#$fe, Blob, 1);
+  AppendBufferToRawByteString(Blob, #0#0);
+  FileFromString(Blob, Filename);
 end;
 
 function TDJoin.GetBlob: RawByteString;
@@ -301,7 +308,7 @@ var
   ProvisionData: TODJ_PROVISION_DATA;
   Provision: TODJ_PROVISION_DATA_ctr;
   Ctx: TNDRPackContext;
-  Base64, WideStr: RawByteString;
+  Base64: RawByteString;
   MemCtx: TMemoryContext;
 begin
   Result := '';
@@ -314,9 +321,6 @@ begin
 
     Base64 := BinToBase64(Ctx.Buffer);
     Result := Utf8DecodeToUnicodeRawByteString(PUtf8Char(@Base64[1]), Length(Base64));
-    // Insert BOM
-    Insert(#$ff#$fe, Result, 0);
-    AppendBufferToRawByteString(Result, #0#0);
   finally
     Ctx.Free;
     MemCtx.Clear;
