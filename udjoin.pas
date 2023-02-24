@@ -53,7 +53,7 @@ type
     /// Load a DJoin file in memory
     // - Return true if the file has been successfully loaded
     function LoadFromFile(const Filename: TFileName): boolean;
-    function LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN, BaseDN: RawUtf8; Password: SpiUtf8): Boolean;
+    function LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN, BaseDN: RawUtf8; Password: SpiUtf8; DomainController: RawUtf8 = ''; Address: RawUtf8 = ''): Boolean;
 
     function LoadFromProvisionData(const ProvisionData: TODJ_PROVISION_DATA): Boolean;
     procedure SaveToFile(Filename: TFileName);
@@ -112,7 +112,8 @@ begin
 end;
 
 function TDJoin.LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN,
-  BaseDN: RawUtf8; Password: SpiUtf8): Boolean;
+  BaseDN: RawUtf8; Password: SpiUtf8; DomainController: RawUtf8;
+  Address: RawUtf8): Boolean;
 var
   ComputerDN, Domain, Addr, DC, Netbios, DCReference, SiteName: RawUtf8;
   ComputerObject, DCObject, DNObject: TLdapResult;
@@ -123,8 +124,12 @@ begin
   ComputerDN := 'CN='+ComputerName+',' + DN +','+BaseDN;
 
   Domain := DNToCN(BaseDN);
-  Netbios := UpperCase(String(Domain).Split('.')[0]);
-  Addr := '\\'+ldap.TargetHost;
+  Netbios := ldap.NETBIOSDomainName;
+  if Address = '' then
+    Addr := '\\'+ldap.TargetHost // Not working if TargetHost is a dns address
+  else
+    Addr := '\\' + Address;
+
 
   // Computer Object
   ComputerObject := ldap.SearchFirst(ComputerDN, '', []);
@@ -133,8 +138,11 @@ begin
   Rid := sid.SubAuthority[sid.SubAuthorityCount - 1];
   Dec(sid.SubAuthorityCount);
 
-  // DC Object
-  DCObject := ldap.SearchFirst(BaseDN, '(primaryGroupID=516)', []);
+  // DC Object (take first DC if none supplied)
+  if DomainController = '' then
+    DCObject := ldap.SearchFirst(BaseDN, '(primaryGroupID=516)', [])
+  else
+    DCObject := ldap.SearchFirst(ldap.GetWellKnownObjectDN(GUID_DOMAIN_CONTROLLERS_CONTAINER_W), '(dNSHostName=' + DomainController + ')', []);
   if not Assigned(DCObject) then
      raise Exception.Create('Unable to retreive Domain Controller object');
   DC := '\\'+DCObject.Attributes.Find('dNSHostName').GetReadable;
@@ -155,17 +163,18 @@ begin
   Options := 0;
 
   NetbiosDomainName := Netbios;
-  DnsDomainName := Domain;
-  DnsForestName := Domain;
+  DnsDomainName := Domain; // Not sure
+  DnsForestName := Domain; // Not sure
   DomainGUID := DomGUID;
   DomainSID := sid;
 
   DCName := DC;
   DCAddress := Addr;
   DCAddressType := DS_INET_ADDRESS;
-  DCFlags := $E00013FD;
-  DCSiteName := SiteName;
+  DCFlags := $E00013FD; // Should be computed
+  DCSiteName := SiteName; // Both site names are not sure
   DCClientSiteName := SiteName;
+  Result := True;
 end;
 
 function TDJoin.LoadFromProvisionData(const ProvisionData: TODJ_PROVISION_DATA
