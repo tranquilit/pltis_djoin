@@ -115,7 +115,7 @@ function TDJoin.LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN,
   BaseDN: RawUtf8; Password: SpiUtf8; DomainController: RawUtf8;
   Address: RawUtf8): Boolean;
 var
-  ComputerDN, Domain, Addr, DC, Netbios, DCReference, SiteName: RawUtf8;
+  ComputerDN, Domain, Addr, DC, Netbios, DCReference, SiteName, SidStr: RawUtf8;
   ComputerObject, DCObject, DNObject: TLdapResult;
   Sid: TSid;
   Rid: Cardinal;
@@ -133,7 +133,7 @@ begin
 
   // Computer Object
   ComputerObject := ldap.SearchFirst(ComputerDN, '', []);
-  if not (Assigned(ComputerObject) and ComputerObject.CopyObjectSid(Sid)) then
+  if not (Assigned(ComputerObject) and ComputerObject.CopyObjectSid(SidStr) and TextToSid(PUtf8Char(@SidStr[1]), Sid)) then
     raise Exception.Create('Unable to retreive computer SID');
   Rid := sid.SubAuthority[sid.SubAuthorityCount - 1];
   Dec(sid.SubAuthorityCount);
