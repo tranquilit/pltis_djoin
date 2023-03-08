@@ -21,7 +21,7 @@ type
   TNDR_Ptr = UInt32;
 
   TCommonTypeHeader = record
-    case bool of
+    case Boolean of
       False: (Version: Byte;
              Endianness: Byte;
              Length: UInt16;
