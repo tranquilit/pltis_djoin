@@ -142,7 +142,7 @@ begin
   if DomainController = '' then
     DCObject := ldap.SearchFirst(BaseDN, '(primaryGroupID=516)', [])
   else
-    DCObject := ldap.SearchFirst(ldap.GetWellKnownObjectDN(GUID_DOMAIN_CONTROLLERS_CONTAINER_W), '(dNSHostName=' + DomainController + ')', []);
+    DCObject := ldap.SearchFirst(ldap.GetWellKnownObject(GUID_DOMAIN_CONTROLLERS_CONTAINER_W), '(dNSHostName=' + DomainController + ')', []);
   if not Assigned(DCObject) then
      raise Exception.Create('Unable to retreive Domain Controller object');
   DC := '\\'+DCObject.Attributes.Find('dNSHostName').GetReadable;
