@@ -57,7 +57,7 @@ type
 
     function LoadFromProvisionData(const ProvisionData: TODJ_PROVISION_DATA): Boolean;
     procedure SaveToFile(Filename: TFileName);
-    function GetBlob: RawByteString;
+    function GetBlob(EncodeUtf16: Boolean = True): RawByteString;
 
     procedure Dump;
 
@@ -97,7 +97,8 @@ implementation
 uses
   mormot.core.buffers,
   mormot.core.unicode,
-  mormot.core.text;
+  mormot.core.text,
+  mormot.net.dns;
 
 { TDJoin }
 
@@ -126,7 +127,7 @@ begin
   Domain := DNToCN(BaseDN);
   Netbios := ldap.NETBIOSDomainName;
   if Address = '' then
-    Addr := '\\'+ldap.TargetHost // Not working if TargetHost is a dns address
+    Addr := '\\' + DnsLookup(ldap.TargetHost)
   else
     Addr := '\\' + Address;
 
@@ -312,7 +313,7 @@ begin
   FileFromString(Blob, Filename);
 end;
 
-function TDJoin.GetBlob: RawByteString;
+function TDJoin.GetBlob(EncodeUtf16: Boolean): RawByteString;
 var
   ProvisionData: TODJ_PROVISION_DATA;
   Provision: TODJ_PROVISION_DATA_ctr;
@@ -329,7 +330,10 @@ begin
     TODJ_PROVISION_DATA_serialized_ptr.NDRPack(Ctx, Provision);
 
     Base64 := BinToBase64(Ctx.Buffer);
-    Result := Utf8DecodeToUnicodeRawByteString(PUtf8Char(@Base64[1]), Length(Base64));
+    if EncodeUtf16 then
+      Result := Utf8DecodeToUnicodeRawByteString(PUtf8Char(@Base64[1]), Length(Base64))
+    else
+      Result := Base64;
   finally
     Ctx.Free;
     MemCtx.Clear;
