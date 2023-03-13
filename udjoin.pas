@@ -127,7 +127,7 @@ begin
   Domain := DNToCN(BaseDN);
   Netbios := ldap.NETBIOSDomainName;
   if Address = '' then
-    Addr := '\\' + DnsLookup(ldap.TargetHost)
+    Addr := '\\' + DnsLookup(ldap.Settings.TargetHost)
   else
     Addr := '\\' + Address;
 
