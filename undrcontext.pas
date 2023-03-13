@@ -137,6 +137,7 @@ implementation
 
 uses
   mormot.core.buffers,
+  mormot.core.text,
   mormot.core.unicode;
 
 const
@@ -290,7 +291,7 @@ end;
 
 procedure TNDRPackContext.Pack(Content: Pointer; Len: SizeInt);
 begin
-  AppendBufferToRawByteString(Buffer, Content^, Len);
+  Append(Buffer, Content, Len);
   Inc(BufferLength, Len);
 end;
 

@@ -309,7 +309,7 @@ begin
   Blob := GetBlob;
   // Insert BOM
   Insert(#$ff#$fe, Blob, 1);
-  AppendBufferToRawByteString(Blob, #0#0);
+  Append(Blob, #0#0);
   FileFromString(Blob, Filename);
 end;
 
