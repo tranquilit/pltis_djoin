@@ -291,11 +291,13 @@ begin
 
   OpPackagePartCollection.pParts[0].PartType := GUID_JOIN_PROVIDER;
   OpPackagePartCollection.pParts[0].ulFlags := 1; // ?
+  FillZero(OpPackagePartCollection.pParts[0].Extension, SizeOf(OpPackagePartCollection.pParts[0].Extension));
   OpPackagePartCollection.pParts[0].Part.RawBytes := MemCtx^.GetZeroedMem(SizeOf(TODJ_WIN7BLOB));
   FillWin7blob(OpPackagePartCollection.pParts[0].Part.Win7Blob^);
 
   OpPackagePartCollection.pParts[1].PartType := GUID_JOIN_PROVIDER3;
   OpPackagePartCollection.pParts[1].ulFlags := 0; // ?
+  FillZero(OpPackagePartCollection.pParts[1].Extension, SizeOf(OpPackagePartCollection.pParts[1].Extension));
   OpPackagePartCollection.pParts[1].Part.JoinProv3.p := MemCtx^.GetZeroedMem(SizeOf(TOP_JOINPROV3_PART));
   JoinPart := OpPackagePartCollection.pParts[1].Part.JoinProv3.p;
   JoinPart^.Rid := MachineRid;

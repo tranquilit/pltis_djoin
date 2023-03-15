@@ -98,6 +98,7 @@ type
   public
     constructor Create;
 
+    procedure Padd(Size: SizeInt);
     procedure Pack(Content: Pointer; Len: SizeInt);
     procedure PackHeader(Size: SizeInt);
     procedure PackByte(Value: Byte);
@@ -248,6 +249,8 @@ end;
 
 function TNDRUnpackContext.UnpackPtr: Pointer;
 begin
+  /// Pointers value must not be used as pointer
+  // The only test must be whether they are nil or not
   Result := Pointer(UnpackUInt32);
 end;
 
@@ -287,6 +290,14 @@ end;
 constructor TNDRPackContext.Create;
 begin
   inherited Create('', 0);
+end;
+
+procedure TNDRPackContext.Padd(Size: SizeInt);
+var
+  i: Integer;
+begin
+  for i := 0 to Size - 1 do
+    PackByte(0);
 end;
 
 procedure TNDRPackContext.Pack(Content: Pointer; Len: SizeInt);
@@ -381,14 +392,18 @@ end;
 class procedure TNDRCustomType.NDRPack(Ctx: TNDRPackContext; var Data: NDRType;
   NDRFormat: UInt32);
 var
-  PreviousPtrCount: SizeInt;
+  PreviousPtrCount, DataSize, PaddingBytes: SizeInt;
 begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
-    Ctx.PackHeader(Data.NDRSize(NDR_ScalarBuffer));
+    DataSize := Data.NDRSize(NDR_ScalarBuffer);
+    PaddingBytes := DataSize mod 8;
+    Inc(DataSize, PaddingBytes);
+    Ctx.PackHeader(DataSize);
     PreviousPtrCount := Ctx.PointerCount;
     Ctx.PointerCount := 0;
     Data.NDRPack(Ctx, NDR_ScalarBuffer);
+    Ctx.Padd(PaddingBytes); // Align on 0x8
     Ctx.PointerCount := PreviousPtrCount;
   end;
 end;
@@ -402,6 +417,7 @@ begin
   begin
     Inc(Result, SizeOf(TNDRPrivateHeader));
     Inc(Result, Data.NDRSize(NDR_ScalarBuffer));
+    Inc(Result, Result mod 8); // Align on 0x8
   end;
 end;
 

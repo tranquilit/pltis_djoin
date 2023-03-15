@@ -293,10 +293,7 @@ begin
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
-  begin
     Ctx.PackWideStr(lpSid);
-    Ctx.PackUInt32(0);
-  end;
 end;
 
 function TOP_JOINPROV3_PART.NDRSize(NDRFormat: UInt32): SizeUInt;
@@ -310,11 +307,7 @@ begin
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
-  begin
     Inc(Result, NDRWideStrSize(lpSid));
-    // Padding ?
-    Inc(Result, SizeOf(UInt32));
-  end;
 end;
 
 { TOP_PACKAGE_PART }
@@ -438,8 +431,6 @@ begin
       for i := 0 to NbParts - 1 do
         pParts[i].NDRUnpack(Ctx, NDR_Buffer);
     end;
-    // Extension
-    Ctx.Unpack(8);
   end;
 end;
 
@@ -652,7 +643,6 @@ begin
     EncryptionContext.NDRPack(Ctx, NDR_Buffer);
     WrappedPartCollection.NDRPack(Ctx, NDR_Buffer);
     Extension.NDRPack(Ctx, NDR_Buffer);
-    Ctx.PackUInt32(0);
   end;
 end;
 
@@ -675,8 +665,6 @@ begin
     Inc(Result, EncryptionContext.NDRSize(NDR_Buffer));
     Inc(Result, WrappedPartCollection.NDRSize(NDR_Buffer));
     Inc(Result, Extension.NDRSize(NDR_Buffer));
-    // ??
-    Inc(Result, SizeOf(UInt32));
   end;
 end;
 
@@ -773,6 +761,8 @@ end;
 { TODJ_UNICODE_STRING }
 
 function TODJ_UNICODE_STRING.NDRSize(NDRFormat: UInt32): SizeUInt;
+var
+  Len: PtrInt;
 begin
   Result := 0;
 
@@ -786,7 +776,8 @@ begin
   if (NDRFormat and NDR_Buffer) > 0 then
   begin
     Inc(Result, SizeOf(UInt32) * 3);
-    Inc(Result, (StrLenW(PWideChar(@Buffer[1])) + 1) * 2);
+    Len := StrLenW(PWideChar(@Buffer[1]));
+    Inc(Result, (Len + Len mod 2) * 2);
   end;
 end;
 
@@ -835,7 +826,7 @@ begin
     Ctx.PackUInt32(NbChars + 1);
     Ctx.PackUInt32(0);
     Ctx.PackUInt32(NbChars);
-    Ctx.Pack(@Buffer[1], (NbChars + 1) * 2);
+    Ctx.Pack(@Buffer[1], (NbChars + NbChars mod 2) * 2);
   end;
 end;
 
@@ -962,8 +953,6 @@ begin
     Ctx.PackWideStr(lpMachinePassword);
     DnsDomainInfo.NDRPack(Ctx, NDR_Buffer);
     DcInfo.NDRPack(Ctx, NDR_Buffer);
-    // Padding but don't know why
-    Ctx.PackUInt32(0);
   end;
 end;
 
@@ -989,8 +978,6 @@ begin
     Inc(Result, NDRWideStrSize(lpMachinePassword));
     Inc(Result, DnsDomainInfo.NDRSize(NDR_Buffer));
     Inc(Result, DcInfo.NDRSize(NDR_Buffer));
-    // Padding but don't know why
-    Inc(Result, SizeOf(UInt32));
   end;
 end;
 
@@ -1134,7 +1121,6 @@ begin
     // Buffer Part
     for i := 0 to ulcBlobs - 1 do
       pBlobs[i].NDRPack(Ctx, NDR_Buffer);
-    Ctx.PackUInt32(0);
   end;
 end;
 
@@ -1162,8 +1148,6 @@ begin
     // Buffer Part
     for i := 0 to ulcBlobs - 1 do
       Inc(Result, pBlobs[i].NDRSize(NDR_Buffer));
-    // Padding ?
-    Inc(Result, SizeOf(UInt32));
   end;
 end;
 
