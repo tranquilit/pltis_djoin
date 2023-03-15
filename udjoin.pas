@@ -122,14 +122,14 @@ var
   Rid: Cardinal;
   DomGuid: TGuid;
 begin
-  ComputerDN := 'CN='+ComputerName+',' + DN +','+BaseDN;
+  ComputerDN := FormatUtf8('CN=%,%,%', [ComputerName, DN, BaseDN]);
 
   Domain := DNToCN(BaseDN);
   Netbios := ldap.NETBIOSDomainName;
   if Address = '' then
-    Addr := '\\' + DnsLookup(ldap.Settings.TargetHost)
+    Addr := FormatUtf8('\\%', [DnsLookup(ldap.Settings.TargetHost)])
   else
-    Addr := '\\' + Address;
+    Addr := FormatUtf8('\\%', [Address]);
 
 
   // Computer Object
@@ -143,15 +143,15 @@ begin
   if DomainController = '' then
     DCObject := ldap.SearchFirst(BaseDN, '(primaryGroupID=516)', [])
   else
-    DCObject := ldap.SearchFirst(ldap.GetWellKnownObject(GUID_DOMAIN_CONTROLLERS_CONTAINER_W), '(dNSHostName=' + DomainController + ')', []);
+    DCObject := ldap.SearchFirst(ldap.GetWellKnownObject(GUID_DOMAIN_CONTROLLERS_CONTAINER_W), FormatUtf8('(dNSHostName=%)', [DomainController]), ['dNSHostName', 'serverReferenceBL']);
   if not Assigned(DCObject) then
      raise Exception.Create('Unable to retreive Domain Controller object');
-  DC := '\\'+DCObject.Attributes.Find('dNSHostName').GetReadable;
+  DC := FormatUtf8('\\%', [DCObject.Attributes.Find('dNSHostName').GetReadable]);
   DCReference := DCObject.Attributes.Find('serverReferenceBL').GetReadable;
   SiteName := String(DNToCN(DCReference)).Split('/')[3];
 
   // Base Dn Object
-  DNObject := ldap.SearchFirst(BaseDN, '(distinguishedName='+BaseDN+')', []);
+  DNObject := ldap.SearchFirst(BaseDN, FormatUtf8('(distinguishedName=%)', [BaseDN]), []);
   if not Assigned(DNObject) or not DNObject.CopyObjectGUID(DomGuid) then
      raise Exception.Create('Unable to retreive Domain object');
 
