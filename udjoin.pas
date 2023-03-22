@@ -125,7 +125,7 @@ begin
   ComputerDN := FormatUtf8('CN=%,%,%', [ComputerName, DN, BaseDN]);
 
   Domain := DNToCN(BaseDN);
-  Netbios := ldap.NETBIOSDomainName;
+  Netbios := ldap.NetbiosDN;
   if Address = '' then
     Addr := FormatUtf8('\\%', [DnsLookup(ldap.Settings.TargetHost)])
   else
@@ -143,7 +143,7 @@ begin
   if DomainController = '' then
     DCObject := ldap.SearchFirst(BaseDN, '(primaryGroupID=516)', [])
   else
-    DCObject := ldap.SearchFirst(ldap.GetWellKnownObject(GUID_DOMAIN_CONTROLLERS_CONTAINER_W), FormatUtf8('(dNSHostName=%)', [DomainController]), ['dNSHostName', 'serverReferenceBL']);
+    DCObject := ldap.SearchFirst(ldap.WellKnownObjects()^.DomainControllers, FormatUtf8('(dNSHostName=%)', [DomainController]), ['dNSHostName', 'serverReferenceBL']);
   if not Assigned(DCObject) then
      raise Exception.Create('Unable to retreive Domain Controller object');
   DC := FormatUtf8('\\%', [DCObject.Attributes.Find('dNSHostName').GetReadable]);
