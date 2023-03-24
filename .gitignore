@@ -2,4 +2,4 @@ backup
 lib
 *.exe
 *.lps
-djoin.txt
+djoin*.txt

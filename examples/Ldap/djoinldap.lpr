@@ -19,7 +19,16 @@ begin
   ldap := TLdapClient.Create;
   try
     if Assigned(Settings) then
-      ldap.Settings.Assign(Settings);
+    begin
+      ldap.Settings.TargetHost := Settings.TargetHost;
+      ldap.Settings.TargetPort := Settings.TargetPort;
+      ldap.Settings.UserName := Settings.UserName;
+      ldap.Settings.Password := Settings.Password;
+      ldap.Settings.KerberosDN := Settings.KerberosDN;
+      ldap.Settings.KerberosSpn := Settings.KerberosSpn;
+      ldap.Settings.Timeout := Settings.Timeout;
+      ldap.Settings.Tls := Settings.Tls;
+    end;
 
     if ldap.Connect then
     begin
