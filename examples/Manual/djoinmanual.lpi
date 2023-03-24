@@ -10,7 +10,7 @@
         <MainUnitHasScaledStatement Value="False"/>
       </Flags>
       <SessionStorage Value="InProjectDir"/>
-      <Title Value="djointest"/>
+      <Title Value="djoinmanual"/>
       <UseAppBundle Value="False"/>
       <ResourceType Value="res"/>
     </General>
@@ -31,8 +31,9 @@
     </RequiredPackages>
     <Units>
       <Unit>
-        <Filename Value="djointest.lpr"/>
+        <Filename Value="djoinmanual.lpr"/>
         <IsPartOfProject Value="True"/>
+        <UnitName Value="DJoinManual"/>
       </Unit>
     </Units>
   </ProjectOptions>
@@ -40,7 +41,7 @@
     <Version Value="11"/>
     <PathDelim Value="\"/>
     <Target>
-      <Filename Value="djointest"/>
+      <Filename Value="djoinmanual"/>
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir)"/>

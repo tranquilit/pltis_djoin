@@ -2,13 +2,13 @@
   This source is only used to compile and install the package.
  }
 
-unit DJoin;
+unit pltis_djoin;
 
 {$warn 5023 off : no warning about unused units}
 interface
 
 uses
-  uDJoin, uDJoinTypes, uNDRContext, LazarusPackageIntf;
+  uDJoin, LazarusPackageIntf;
 
 implementation
 
@@ -17,5 +17,5 @@ begin
 end;
 
 initialization
-  RegisterPackage('DJoin', @Register);
+  RegisterPackage('pltis_djoin', @Register);
 end.

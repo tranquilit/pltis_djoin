@@ -8,6 +8,8 @@
       <Version Value="11"/>
       <PathDelim Value="\"/>
       <SearchPaths>
+        <IncludeFiles Value="..\src"/>
+        <OtherUnitFiles Value="..\src"/>
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
       <Linking>
@@ -18,15 +20,17 @@
     </CompilerOptions>
     <Files>
       <Item>
-        <Filename Value="udjoin.pas"/>
+        <Filename Value="..\src\udjoin.pas"/>
         <UnitName Value="uDJoin"/>
       </Item>
       <Item>
-        <Filename Value="udjointypes.pas"/>
+        <Filename Value="..\src\udjointypes.pas"/>
+        <AddToUsesPkgSection Value="False"/>
         <UnitName Value="uDJoinTypes"/>
       </Item>
       <Item>
-        <Filename Value="undrcontext.pas"/>
+        <Filename Value="..\src\undrcontext.pas"/>
+        <AddToUsesPkgSection Value="False"/>
         <UnitName Value="uNDRContext"/>
       </Item>
     </Files>
