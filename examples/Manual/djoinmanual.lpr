@@ -1,3 +1,6 @@
+/// This unit is a part of the Open Source Tranquil IT DJoin,
+// licensed under a MPL/GPL/LGPL three license - see LICENSE.md
+
 program DJoinManual;
 
 uses

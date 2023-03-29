@@ -1,6 +1,6 @@
-# Tranquil IT DJoin framework Licencing Terms
+# Tranquil IT DJoin Licencing Terms
 
-**The DJoin framework. Copyright (C) 2023 Tranquil IT**
+**Tranquil IT DJoin library. Copyright (C) 2023 Tranquil IT**
 
 **Tranquil IT  - https://www.tranquil.it/**
 
@@ -9,7 +9,7 @@ The files in this repository are part of the Tranquil IT Softwares, and are rele
 
 ## MPL 1.1/GPL 2.0/LGPL 2.1 three-license
 
-The framework source code is licensed under a disjunctive three-license giving the user the choice of one of the three following sets of free software/open source licensing terms:
+The source code is licensed under a disjunctive three-license giving the user the choice of one of the three following sets of free software/open source licensing terms:
 - *Mozilla Public License*, version 1.1 or later (MPL);
 - *GNU General Public License*, version 2.0 or later (GPL);
 - *GNU Lesser General Public License*, version 2.1 or later (LGPL), with *linking exception* of the *FPC modified LGPL*.
@@ -18,7 +18,7 @@ The framework source code is licensed under a disjunctive three-license giving t
 
 *As a special exception of the LGPL, the copyright holders of this library give you permission to link this library with independent modules to produce an executable, regardless of the license terms of these independent modules, and to copy and distribute the resulting executable under terms of your choice, provided that you also meet, for each linked independent module, the terms and conditions of the license of that module. An independent module is a module which is not derived from or based on this library. If you modify this library, you may extend this exception to your version of the library, but you are not obligated to do so. If you do not wish to do so, delete this exception statement from your version.*
 
-This allows the use of the framework code in a wide variety of software projects, while still maintaining intellectual rights on library code.
+This allows the use of the code in a wide variety of software projects, while still maintaining intellectual rights on library code.
 
 In short:
 - For GPL projects, use the GPL license - see http://www.gnu.org/licenses/gpl-2.0.html

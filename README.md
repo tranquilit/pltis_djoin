@@ -1,4 +1,4 @@
-# Tranquil IT DJoin Package
+# Tranquil IT DJoin
 
 *A DJoin blob (de)serialization library in modern Object Pascal*
 
@@ -35,7 +35,7 @@ Usefull links for the protocol:
 
 ### MPL/GPL/LGPL Three-License
 
-The framework is licensed under a disjunctive three-license giving you the choice of one of the three following sets of free software/open source licensing terms:
+The project is licensed under a disjunctive three-license giving you the choice of one of the three following sets of free software/open source licensing terms:
 - Mozilla Public License, version 1.1 or later;
 - GNU General Public License, version 2.0 or later;
 - GNU Lesser General Public License, version 2.1 or later.
