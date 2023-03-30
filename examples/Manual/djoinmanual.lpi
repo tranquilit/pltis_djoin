@@ -10,7 +10,7 @@
         <MainUnitHasScaledStatement Value="False"/>
       </Flags>
       <SessionStorage Value="InProjectDir"/>
-      <Title Value="djointest"/>
+      <Title Value="djoinmanual"/>
       <UseAppBundle Value="False"/>
       <ResourceType Value="res"/>
     </General>
@@ -26,18 +26,14 @@
     </RunParams>
     <RequiredPackages>
       <Item>
-        <PackageName Value="mormot2"/>
+        <PackageName Value="pltis_djoin"/>
       </Item>
     </RequiredPackages>
     <Units>
       <Unit>
-        <Filename Value="djointest.lpr"/>
+        <Filename Value="djoinmanual.lpr"/>
         <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="udjoin.pas"/>
-        <IsPartOfProject Value="True"/>
-        <UnitName Value="uDJoin"/>
+        <UnitName Value="DJoinManual"/>
       </Unit>
     </Units>
   </ProjectOptions>
@@ -45,7 +41,7 @@
     <Version Value="11"/>
     <PathDelim Value="\"/>
     <Target>
-      <Filename Value="djointest"/>
+      <Filename Value="djoinmanual"/>
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir)"/>

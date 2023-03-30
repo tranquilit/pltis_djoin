@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <Package Version="5">
+    <PathDelim Value="\"/>
+    <Name Value="pltis_djoin"/>
+    <Type Value="RunAndDesignTime"/>
+    <CompilerOptions>
+      <Version Value="11"/>
+      <PathDelim Value="\"/>
+      <SearchPaths>
+        <IncludeFiles Value="..\src"/>
+        <OtherUnitFiles Value="..\src"/>
+        <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+      </SearchPaths>
+      <Linking>
+        <Debugging>
+          <DebugInfoType Value="dsDwarf3"/>
+        </Debugging>
+      </Linking>
+    </CompilerOptions>
+    <Files>
+      <Item>
+        <Filename Value="..\src\udjoin.pas"/>
+        <UnitName Value="uDJoin"/>
+      </Item>
+      <Item>
+        <Filename Value="..\src\udjointypes.pas"/>
+        <AddToUsesPkgSection Value="False"/>
+        <UnitName Value="uDJoinTypes"/>
+      </Item>
+      <Item>
+        <Filename Value="..\src\undrcontext.pas"/>
+        <AddToUsesPkgSection Value="False"/>
+        <UnitName Value="uNDRContext"/>
+      </Item>
+    </Files>
+    <RequiredPkgs>
+      <Item>
+        <PackageName Value="mormot2"/>
+      </Item>
+      <Item>
+        <PackageName Value="FCL"/>
+      </Item>
+    </RequiredPkgs>
+    <UsageOptions>
+      <UnitPath Value="$(PkgOutDir)"/>
+    </UsageOptions>
+    <PublishOptions>
+      <Version Value="2"/>
+      <UseFileFilters Value="True"/>
+    </PublishOptions>
+  </Package>
+</CONFIG>
