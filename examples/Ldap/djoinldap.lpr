@@ -51,7 +51,7 @@ begin
 
         with TDJoin.Create do
         try
-          LoadFromLDAP(ldap, ComputerName, ComputerOU, ldap.RootDN, Password);
+          LoadFromLDAP(ldap, ComputerName, ComputerOU, Password);
           Dump;
           SaveToFile(OutputFile);
         finally

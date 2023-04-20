@@ -56,7 +56,7 @@ type
     /// Load a DJoin file in memory
     // - Return true if the file has been successfully loaded
     function LoadFromFile(const Filename: TFileName): boolean;
-    function LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN, BaseDN: RawUtf8; Password: SpiUtf8; DomainController: RawUtf8 = ''; Address: RawUtf8 = ''): Boolean;
+    function LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN: RawUtf8; Password: SpiUtf8; DomainController: RawUtf8 = ''; Address: RawUtf8 = ''): Boolean;
 
     function LoadFromProvisionData(const ProvisionData: TODJ_PROVISION_DATA): Boolean;
     procedure SaveToFile(Filename: TFileName);
@@ -115,19 +115,21 @@ begin
   Result := TDJoinParser.ParseFile(Filename, Self);
 end;
 
-function TDJoin.LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN,
-  BaseDN: RawUtf8; Password: SpiUtf8; DomainController: RawUtf8;
+function TDJoin.LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN: RawUtf8;
+  Password: SpiUtf8; DomainController: RawUtf8;
   Address: RawUtf8): Boolean;
 var
-  ComputerDN, Domain, Addr, DC, Netbios, DCReference, SiteName, SidStr: RawUtf8;
+  ComputerDN, Addr, DC, Netbios, DCReference, SiteName, SidStr,
+    DomainCN, ForestCN: RawUtf8;
   ComputerObject, DCObject, DNObject: TLdapResult;
   Sid: TSid;
   Rid: Cardinal;
   DomGuid: TGuid;
 begin
-  ComputerDN := FormatUtf8('CN=%,%,%', [ComputerName, DN, BaseDN]);
+  ComputerDN := FormatUtf8('CN=%,%,%', [ComputerName, DN, ldap.DefaultDN]);
 
-  Domain := DNToCN(BaseDN);
+  DomainCN := DNToCN(ldap.DefaultDN);
+  ForestCN := DNToCN(ldap.RootDN); // Only works with two levels of subdomains
   Netbios := ldap.NetbiosDN;
   if Address = '' then
     Addr := FormatUtf8('\\%', [DnsLookup(ldap.Settings.TargetHost)])
@@ -144,7 +146,7 @@ begin
 
   // DC Object (take first DC if none supplied)
   if DomainController = '' then
-    DCObject := ldap.SearchFirst(BaseDN, '(primaryGroupID=516)', [])
+    DCObject := ldap.SearchFirst(ldap.DefaultDN, '(primaryGroupID=516)', [])
   else
     DCObject := ldap.SearchFirst(ldap.WellKnownObjects()^.DomainControllers, FormatUtf8('(dNSHostName=%)', [DomainController]), ['dNSHostName', 'serverReferenceBL']);
   if not Assigned(DCObject) then
@@ -154,21 +156,21 @@ begin
   SiteName := String(DNToCN(DCReference)).Split('/')[3];
 
   // Base Dn Object
-  DNObject := ldap.SearchFirst(BaseDN, FormatUtf8('(distinguishedName=%)', [BaseDN]), []);
+  DNObject := ldap.SearchFirst(ldap.DefaultDN, FormatUtf8('(distinguishedName=%)', [ldap.DefaultDN]), []);
   if not Assigned(DNObject) or not DNObject.CopyObjectGUID(DomGuid) then
      raise Exception.Create('Unable to retreive Domain object');
 
 
   // Assign values
-  MachineDomainName := Domain;
+  MachineDomainName := DomainCN;
   MachineName := ComputerName;
   MachinePassword := Password;
   MachineRid := Rid;
   Options := 0;
 
   NetbiosDomainName := Netbios;
-  DnsDomainName := Domain; // Not sure
-  DnsForestName := Domain; // Not sure
+  DnsDomainName := DomainCN;
+  DnsForestName := ForestCN;
   DomainGUID := DomGUID;
   DomainSID := sid;
 
@@ -176,7 +178,7 @@ begin
   DCAddress := Addr;
   DCAddressType := DS_INET_ADDRESS;
   DCFlags := $E00013FD; // Should be computed
-  DCSiteName := SiteName; // Both site names are not sure
+  DCSiteName := SiteName;
   DCClientSiteName := SiteName;
   Result := True;
 end;
