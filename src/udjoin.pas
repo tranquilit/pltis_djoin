@@ -55,7 +55,9 @@ type
 
     /// Load a DJoin file in memory
     // - Return true if the file has been successfully loaded
-    function LoadFromFile(const Filename: TFileName): boolean;
+    function LoadFromFile(const Filename: TFileName; Unicode: Boolean = True): boolean;
+    function LoadFromFileContent(const FileContent: RawByteString; Unicode: Boolean = True): Boolean;
+    function LoadFromBinary(const content: RawByteString): Boolean;
     function LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN: RawUtf8; Password: SpiUtf8; DomainController: RawUtf8 = ''; Address: RawUtf8 = ''): Boolean;
 
     function LoadFromProvisionData(const ProvisionData: TODJ_PROVISION_DATA): Boolean;
@@ -90,8 +92,8 @@ type
 
   TDJoinParser = class
   public
-    class function ParseFile(FileName: TFileName; var DJoin: TDJoin): Boolean;
-    class function ParseFileContent(FileContent: RawByteString; var DJoin: TDJoin): Boolean;
+    class function ParseFile(FileName: TFileName; var DJoin: TDJoin; Unicode: Boolean = True): Boolean;
+    class function ParseFileContent(FileContent: RawByteString; var DJoin: TDJoin; Unicode: Boolean = True): Boolean;
     class function ParseBinary(Binary: RawByteString; var DJoin: TDJoin): Boolean;
   end;
 
@@ -110,9 +112,21 @@ begin
 
 end;
 
-function TDJoin.LoadFromFile(const Filename: TFileName): boolean;
+function TDJoin.LoadFromFile(const Filename: TFileName; Unicode: Boolean
+  ): boolean;
 begin
-  Result := TDJoinParser.ParseFile(Filename, Self);
+  Result := TDJoinParser.ParseFile(Filename, Self, Unicode);
+end;
+
+function TDJoin.LoadFromFileContent(const FileContent: RawByteString;
+  Unicode: Boolean): Boolean;
+begin
+  Result := TDJoinParser.ParseFileContent(FileContent, Self , Unicode);
+end;
+
+function TDJoin.LoadFromBinary(const content: RawByteString): Boolean;
+begin
+  Result := TDJoinParser.ParseBinary(content, Self);
 end;
 
 function TDJoin.LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN: RawUtf8;
@@ -401,19 +415,22 @@ begin
   end;
 end;
 
-class function TDJoinParser.ParseFile(FileName: TFileName; var DJoin: TDJoin
-  ): Boolean;
+class function TDJoinParser.ParseFile(FileName: TFileName; var DJoin: TDJoin;
+  Unicode: Boolean): Boolean;
 begin
-  Result := ParseFileContent(StringFromFile(Filename), DJoin);
+  Result := ParseFileContent(StringFromFile(Filename), DJoin, Unicode);
 end;
 
 class function TDJoinParser.ParseFileContent(FileContent: RawByteString;
-  var DJoin: TDJoin): Boolean;
+  var DJoin: TDJoin; Unicode: Boolean): Boolean;
 var
   Base64: RawUtf8;
   Binary: RawByteString;
 begin
-  Base64 := RawUnicodeToUtf8(pointer(FileContent), Length(WideString(FileContent)) div 2 - 1);
+  if Unicode then
+    Base64 := RawUnicodeToUtf8(pointer(FileContent), Length(WideString(FileContent)) div 2 - 1)
+  else
+    Base64 := FileContent;
   Binary := Base64toBin(Base64);
 
   // Not base64 encoded
