@@ -64,7 +64,9 @@ type
     procedure SaveToFile(Filename: TFileName);
     function GetBlob(EncodeUtf16: Boolean = True): RawByteString;
 
-    procedure Dump;
+
+    function Dump: RawUtf8;
+    procedure DumpToConsole;
 
     // Machine Informations
     property MachineDomainName: RawUtf8 read fMachineDomainName write fMachineDomainName;
@@ -361,34 +363,40 @@ begin
   end;
 end;
 
-procedure TDJoin.Dump;
+function TDJoin.Dump: RawUtf8;
 var
   DomainGuidStr: RawUtf8;
   temp: TRawSmbiosInfo;
 begin
+  Result := '';
   DecodeSmbiosUuid(@DomainGUID, DomainGuidStr, temp);
 
-  WriteLn('Machine Information:');
-  WriteLn(' - Domain: ', MachineDomainName);
-  WriteLn(' - Name: ', MachineName);
-  WriteLn(' - Password: ', MachinePassword);
-  WriteLn(' - Rid: ', MachineRid);
-  WriteLn(' - Site Name: ', DCClientSiteName);
+  Append(Result, 'Machine Information:'#13#10);
+  Append(Result, [' - Domain: ', MachineDomainName, #13#10]);
+  Append(Result, [' - Name: ', MachineName, #13#10]);
+  Append(Result, [' - Password: ', MachinePassword, #13#10]);
+  Append(Result, [' - Rid: ', MachineRid, #13#10]);
+  Append(Result, [' - Site Name: ', DCClientSiteName, #13#10]);
 
-  WriteLn(CRLF+'Domain Policy Information:');
-  WriteLn(' - Netbios Domain Name: ', NetbiosDomainName);
-  WriteLn(' - DNS Domain Name: ', DnsDomainName);
-  WriteLn(' - DNS Forest Name: ', DnsForestName);
-  WriteLn(' - Domain GUID: ', DomainGuidStr);
-  WriteLn(' - Domain SID: ', SidToText(@DomainSID));
+  Append(Result, CRLF+'Domain Policy Information:'#13#10);
+  Append(Result, [' - Netbios Domain Name: ', NetbiosDomainName, #13#10]);
+  Append(Result, [' - DNS Domain Name: ', DnsDomainName, #13#10]);
+  Append(Result, [' - DNS Forest Name: ', DnsForestName, #13#10]);
+  Append(Result, [' - Domain GUID: ', DomainGuidStr, #13#10]);
+  Append(Result, [' - Domain SID: ', SidToText(@DomainSID), #13#10]);
 
 
-  WriteLn(CRLF+'Domain Controller Information:');
-  WriteLn(' - Name: ', DCName);
-  WriteLn(' - Address: ', DCAddress);
-  WriteLn(' - Address Type: ', DCAddressType, Format(' (%d)', [ DCAddressType]));
-  WriteLn(Format(' - Flags: 0x%x', [DCFlags]));
-  WriteLn(' - Site Name: ', DCSiteName);
+  Append(Result, CRLF+'Domain Controller Information:'#13#10);
+  Append(Result, [' - Name: ', DCName, #13#10]);
+  Append(Result, [' - Address: ', DCAddress, #13#10]);
+  Append(Result, [' - Address Type: ', DCAddressType, Format(' (%d)', [ DCAddressType]), #13#10]);
+  Append(Result, Format(' - Flags: 0x%x'#13#10, [DCFlags]));
+  Append(Result, [' - Site Name: ', DCSiteName, #13#10]);
+end;
+
+procedure TDJoin.DumpToConsole;
+begin
+  WriteLn(Dump);
 end;
 
 { TDJoinParser }
