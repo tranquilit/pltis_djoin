@@ -8,7 +8,7 @@ unit pltis_djoin;
 interface
 
 uses
-  uDJoin, LazarusPackageIntf;
+  uDJoin, uLdapUtils, LazarusPackageIntf;
 
 implementation
 

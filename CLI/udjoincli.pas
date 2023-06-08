@@ -9,7 +9,8 @@ uses
   SysUtils,
   mormot.core.base,
   mormot.core.os,
-  uDJoin;
+  uDJoin,
+  uLdapUtils;
 
 type
   TDjoinAction = (daUndefined, daDump, daCreate);
@@ -18,6 +19,8 @@ type
     Config: RawUtf8;
     Output: RawUtf8;
     Force: Boolean;
+    UseLdap: Boolean;
+    ActionIfExists: TActionIfExists;
   end;
 
   TDumpSettings = record
@@ -66,6 +69,8 @@ uses
   mormot.core.text,
   mormot.core.variants,
   mormot.core.data,
+  mormot.net.ldap,
+  mormot.net.sock,
   uDJoinTypes,
   Variants;
 
@@ -160,45 +165,96 @@ var
   ConfigStr: RawByteString;
   dsid: TSid;
   StrSid: RawUtf8;
+  LdapSettings: TLdapClientSettings;
+  Ldap: TLdapClient;
 begin
   if FileExists(Settings.Create.Config) then
     ConfigStr := StringFromFile(Settings.Create.Config)
   else if IsBase64(Settings.Create.Config) then
     ConfigStr := Base64ToBin(Settings.Create.Config);
-  if not ConfigDV.InitJson(ConfigStr, [dvoValueCopiedByReference]) then
+  if not ConfigDV.InitJson(ConfigStr, JSON_FAST) then
   begin
     WriteLn('Cannot load the given configuration. It must be a valid JSON file or base64');
     Exit;
   end;
 
+
+  if Settings.Create.UseLdap then
+  begin
+    LdapSettings := TLdapClientSettings.Create;
+    LdapSettings.TargetHost := ConfigDV.GetValueOrDefault('TargetHost', '');
+    LdapSettings.TargetPort := ConfigDV.GetValueOrDefault('TargetPort', '389');
+    LdapSettings.UserName := ConfigDV.GetValueOrDefault('Username', '');
+    if LdapSettings.UserName <> '' then
+      LdapSettings.Password := VarToStr(ConfigDV.GetValueOrDefault('Password', ''));
+    LdapSettings.KerberosDN := ConfigDV.GetValueOrDefault('KerberosDN', '');
+    LdapSettings.Timeout := ConfigDV.GetValueOrDefault('Timeout', 5000);
+    LdapSettings.Tls := ConfigDV.GetValueOrDefault('Tls', False);
+    LdapSettings.AllowUnsafePasswordBind := ConfigDV.GetValueOrDefault('AllowUnsafePasswordBind', False);
+    Ldap := TLdapClient.Create(LdapSettings);
+
+    if not Ldap.Connect then
+    begin
+      Error('Cannot establish connection with the ldap host');
+      Exit;
+    end;
+
+    if not ldap.BindSaslKerberos then
+      if ConfigDV.GetValueOrDefault('OnlyKerberos', True) or not ldap.Bind then
+      begin
+        Error('Cannot bind to ldap server');
+        Exit;
+      end;
+  end;
+
+  // Raise if value is missing
+  ConfigDV.Options := [dvoValueCopiedByReference];
+
   with TDJoin.Create do
   try
     try
-    MachineDomainName := ConfigDV.S['MachineDomainName'];
-    MachineName := ConfigDV.S['MachineName'];
-    MachinePassword := ConfigDV.S['MachinePassword'];
-    MachineRid := StrToInt(ConfigDV.S['MachineRid']);
-    Options := 6;
+      // Compute Password if not given
+      if Settings.Create.UseLdap then
+      begin
+        // Compute OU if not given
+        LoadFromLDAP(Ldap, ConfigDV.S['MachineName'],
+                           VarToStr(ConfigDV.GetValueOrDefault('MachineOU', '')),
+                           VarToStr(ConfigDV.GetValueOrDefault('MachinePassword', '')),
+                           '', '',
+                           Settings.Create.ActionIfExists);
+      end
+      else
+      begin
+        MachineName := ConfigDV.S['MachineName'];
+        MachinePassword := ConfigDV.S['MachinePassword'];
 
-    NetbiosDomainName := ConfigDV.S['NetbiosDomainName'];
-    DnsDomainName := ConfigDV.S['DnsDomainName'];
-    DnsForestName := ConfigDV.S['DnsForestName'];
-    DomainGUID := StringToGuid(FormatUtf8('{%}', [ConfigDV.S['DomainGUID']]));
-    if IsZero(@DomainGUID, SizeOf(DomainGUID)) then
-      raise Exception.Create('Domain GUID format is invalid');
 
-    StrSid := ConfigDV.S['DomainSID'];
-    if TextToSid(@StrSid[1], dsid) then
-      DomainSID := dsid
-    else
-      raise Exception.Create('Domain SID format is invalid');
+        MachineDomainName := ConfigDV.S['MachineDomainName'];
 
-    DCName := ConfigDV.S['DCName'];
-    DCAddress := ConfigDV.S['DCAddress'];
-    DCAddressType := DS_INET_ADDRESS;
-    DCFlags := $E00013FD;
-    DCSiteName := VarToStr(ConfigDV.GetValueOrDefault('DCSiteName', 'Default-First-Site-Name'));
-    DCClientSiteName := VarToStr(ConfigDV.GetValueOrDefault('DCClientSiteName', 'Default-First-Site-Name'));
+
+        MachineRid := StrToInt(ConfigDV.S['MachineRid']);
+        Options := 6;
+
+        NetbiosDomainName := ConfigDV.S['NetbiosDomainName'];
+        DnsDomainName := ConfigDV.S['DnsDomainName'];
+        DnsForestName := ConfigDV.S['DnsForestName'];
+        DomainGUID := StringToGuid(FormatUtf8('{%}', [ConfigDV.S['DomainGUID']]));
+        if IsZero(@DomainGUID, SizeOf(DomainGUID)) then
+          raise Exception.Create('Domain GUID format is invalid');
+
+        StrSid := ConfigDV.S['DomainSID'];
+        if TextToSid(@StrSid[1], dsid) then
+          DomainSID := dsid
+        else
+          raise Exception.Create('Domain SID format is invalid');
+
+        DCName := '\\'+ConfigDV.S['DCName'];
+        DCAddress := '\\'+ConfigDV.S['DCAddress'];
+        DCAddressType := DS_INET_ADDRESS;
+        DCFlags := $E00013FD;
+        DCSiteName := VarToStr(ConfigDV.GetValueOrDefault('DCSiteName', 'Default-First-Site-Name'));
+        DCClientSiteName := VarToStr(ConfigDV.GetValueOrDefault('DCClientSiteName', 'Default-First-Site-Name'));
+      end;
 
     except
       on E:EDocVariant do
@@ -223,6 +279,7 @@ constructor TDJoinCLI.Create;
 begin
   inherited Create;
   fErrorCode := 0;
+  Settings.Create.ActionIfExists := aieFail;
 end;
 
 function TDJoinCLI.Run: Boolean;
@@ -268,6 +325,13 @@ begin
           '- DCClientSiteName: The domain controller client site name (default: Default-First-Site-Name)');
         Param(['o', 'output'], 'Output file', 'djoin.txt');
         Option(['f', 'force'], 'Doesn''t ask user confirmation (assume yes for all questions)');
+        if Option('ldap', 'Connect to domain through ldap to complete djoin informations. See "djoin create -ldap -h" for more informations') then
+        begin
+          Param(['reuse'], 'Behavior when computer with sAmAccountName already exists in the domain. Must be one of:'#10#9#9#9+
+            '- fail: Abort the djoin creation'#10#9#9#9+
+            '- overwrite: Delete the existing entry and create a new one'#10#9#9#9+
+            '- move: Move the existing entry to the given location. Does nothin if the computer is already at the given location.', 'fail');
+        end;
       end;
     end;
     Param(['u', 'unicode'], 'Base64 blobs (in/out) are encoded in Utf16-le (as in Microsoft''s djoin blobs)', 'True');
@@ -308,6 +372,21 @@ begin
         CLI.Settings.Create.Config := Param(['c', 'config']);
         CLI.Settings.Create.Output := Param(['o', 'output'], '', 'djoin.txt');
         CLI.Settings.Create.Force := Option(['f', 'force']);
+        CLI.Settings.Create.UseLdap := Option('ldap');
+        if CLI.Settings.Create.UseLdap then
+        begin
+          case Param('reuse', '', 'fail') of
+            'fail': CLI.Settings.Create.ActionIfExists := aieFail;
+            'overwrite': CLI.Settings.Create.ActionIfExists := aieOverwrite;
+            'move': CLI.Settings.Create.ActionIfExists := aieMove;
+            else
+            begin
+              WriteLn(StdErr, 'Invalid parameter for reuse');
+              DisplayHelp(False);
+              ExitCode := 1;
+            end;
+          end;
+        end;
       end;
     end;
 

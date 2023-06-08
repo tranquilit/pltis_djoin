@@ -14,7 +14,8 @@ uses
   mormot.core.base,
   mormot.net.ldap,
   uDJoinTypes,
-  uNDRContext;
+  uNDRContext,
+  uLdapUtils;
 
 type
 
@@ -58,7 +59,8 @@ type
     function LoadFromFile(const Filename: TFileName; Unicode: Boolean = True): boolean;
     function LoadFromFileContent(const FileContent: RawByteString; Unicode: Boolean = True): Boolean;
     function LoadFromBinary(const content: RawByteString): Boolean;
-    function LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN: RawUtf8; Password: SpiUtf8; DomainController: RawUtf8 = ''; Address: RawUtf8 = ''): Boolean;
+    function LoadFromLDAP(ldap: TLdapClient; ComputerName, DN: RawUtf8; Password: SpiUtf8; DomainController: RawUtf8 = ''; Address: RawUtf8 = '';
+      HostActionIfExists: TActionIfExists = aieFail): Boolean;
 
     function LoadFromProvisionData(const ProvisionData: TODJ_PROVISION_DATA): Boolean;
     procedure SaveToFile(Filename: TFileName);
@@ -131,18 +133,20 @@ begin
   Result := TDJoinParser.ParseBinary(content, Self);
 end;
 
-function TDJoin.LoadFromLDAP(ldap: TLdapClient; const ComputerName, DN: RawUtf8;
-  Password: SpiUtf8; DomainController: RawUtf8;
-  Address: RawUtf8): Boolean;
+function TDJoin.LoadFromLDAP(ldap: TLdapClient; ComputerName,
+  DN: RawUtf8; Password: SpiUtf8; DomainController: RawUtf8; Address: RawUtf8;
+  HostActionIfExists: TActionIfExists): Boolean;
 var
   ComputerDN, Addr, DC, Netbios, DCReference, SiteName, SidStr,
-    DomainCN, ForestCN: RawUtf8;
+    DomainCN, ForestCN, ErrMsg: RawUtf8;
   ComputerObject, DCObject, DNObject: TLdapResult;
   Sid: TSid;
   Rid: Cardinal;
   DomGuid: TGuid;
 begin
-  ComputerDN := FormatUtf8('CN=%,%,%', [ComputerName, DN, ldap.DefaultDN]);
+  if DN = '' then
+    DN := Ldap.WellKnownObjects^.Computers;
+  ComputerDN := FormatUtf8('CN=%,%', [ComputerName, DN]);
 
   DomainCN := DNToCN(ldap.DefaultDN);
   ForestCN := DNToCN(ldap.RootDN); // Only works with two levels of subdomains
@@ -152,11 +156,14 @@ begin
   else
     Addr := FormatUtf8('\\%', [Address]);
 
+  if PrepareComputerEntry(ldap, ComputerName, DN, ErrMsg, Password, HostActionIfExists) <> ccrSuccess then
+    raise Exception.Create('Unable to prepare computer entry in the ldap server');
 
   // Computer Object
   ComputerObject := ldap.SearchFirst(ComputerDN, '', []);
   if not (Assigned(ComputerObject) and ComputerObject.CopyObjectSid(SidStr) and TextToSid(PUtf8Char(@SidStr[1]), Sid)) then
     raise Exception.Create('Unable to retreive computer SID');
+    // Create computer if not existing
   Rid := sid.SubAuthority[sid.SubAuthorityCount - 1];
   Dec(sid.SubAuthorityCount);
 

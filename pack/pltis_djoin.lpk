@@ -33,6 +33,10 @@
         <AddToUsesPkgSection Value="False"/>
         <UnitName Value="uNDRContext"/>
       </Item>
+      <Item>
+        <Filename Value="..\src\uldaputils.pas"/>
+        <UnitName Value="uLdapUtils"/>
+      </Item>
     </Files>
     <RequiredPkgs>
       <Item>
