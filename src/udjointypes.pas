@@ -10,6 +10,7 @@ interface
 uses
   Classes,
   SysUtils,
+  mormot.core.base,
   mormot.core.os,
   uNDRContext;
 
@@ -38,8 +39,43 @@ const
   DS_DNS_DOMAIN_FLAG : UInt32 = $40000000; // DomainName is a DNS name
   DS_DNS_FOREST_FLAG : UInt32 = $80000000; // DnsForestName is a DNS name
 
+
+  // Registry value types: https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types
+  REG_NONE = 0;
+  REG_SZ = 1;
+  REG_EXPAND_SZ = 2;
+  REG_BINARY = 3;
+  REG_DWORD = 4;
+  REG_DWORD_LITTLE_ENDIAN = 4;
+  REG_DWORD_BIG_ENDIAN = 5;
+  REG_LINK = 6;
+  REG_MULTI_SZ = 7;
+  REG_RESOURCE_LIST = 8;
+  REG_FULL_RESOURCE_DESCRIPTOR = 9;
+  REG_RESOURCE_REQUIREMENTS_LIST = 10;
+  REG_QWORD = 11;
+  REG_QWORD_LITTLE_ENDIAN = 11;
+
+
 type
   {$A-} // every record (or object) is packed from now on
+
+
+  // Types related to GPO
+  TRegistryValue = object
+    Key: RawUtf8;
+    ValueName: RawUtf8;
+    ValueType: UInt32;
+    ValueSize: UInt32;
+    Value: RawByteString;
+  end;
+  TRegistryValues = array of TRegistryValue;
+
+  TGroupPolicy = object
+    Name: RawUtf8;
+    Values: TRegistryValues;
+  end;
+  TGroupPolicies = array of TGroupPolicy;
 
   TDS_FLAGS = UInt32;
   TDS_AddressType = (DS_INET_ADDRESS = 1, DS_NETBIOS_ADDRESS = 2);
@@ -282,13 +318,13 @@ type
   TODJ_PROVISION_DATA_serialized_ptr = specialize TNDRCustomType<TODJ_PROVISION_DATA_ctr>;
 
 procedure DumpDS_Flags(flags: TDS_FLAGS);
+function RegistryTypeToString(RegType: UInt32): RawUtf8;
 
 implementation
 
 uses
   mormot.core.buffers,
-  mormot.core.unicode,
-  mormot.core.base;
+  mormot.core.unicode;
 
 procedure DumpDS_Flags(flags: TDS_FLAGS);
 begin
@@ -309,6 +345,27 @@ begin
   WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_DNS_CONTROLLER_FLAG', DS_DNS_CONTROLLER_FLAG, BoolToStr((Flags and DS_DNS_CONTROLLER_FLAG) > 0, 'True', 'False'), 'DomainControllerName is a DNS name']));
   WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_DNS_DOMAIN_FLAG', DS_DNS_DOMAIN_FLAG, BoolToStr((Flags and DS_DNS_DOMAIN_FLAG) > 0, 'True', 'False'), 'DomainName is a DNS name']));
   WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_DNS_FOREST_FLAG', DS_DNS_FOREST_FLAG, BoolToStr((Flags and DS_DNS_FOREST_FLAG) > 0, 'True', 'False'), 'DnsForestName is a DNS name']));
+end;
+
+function RegistryTypeToString(RegType: UInt32): RawUtf8;
+begin
+  case RegType of
+    REG_NONE: Result := 'REG_NONE';
+    REG_SZ: Result := 'REG_SZ';
+    REG_EXPAND_SZ: Result := 'REG_EXPAND_SZ';
+    REG_BINARY: Result := 'REG_BINARY';
+    REG_DWORD: Result := 'REG_DWORD';
+    REG_DWORD_BIG_ENDIAN: Result := 'REG_DWORD_BIG_ENDIAN';
+    REG_LINK: Result := 'REG_LINK';
+    REG_MULTI_SZ: Result := 'REG_MULTI_SZ';
+    REG_RESOURCE_LIST: Result := 'REG_RESOURCE_LIST';
+    REG_FULL_RESOURCE_DESCRIPTOR: Result := 'REG_FULL_RESOURCE_DESCRIPTOR';
+    REG_RESOURCE_REQUIREMENTS_LIST: Result := 'REG_RESOURCE_REQUIREMENTS_LIST';
+    REG_QWORD: Result := 'REG_QWORD';
+  else
+    Result := 'REG_UNKNOWN';
+  end;
+  Result := Result + ' (' + IntToStr(RegType) + ')';
 end;
 
 { TOP_POLICY_ELEMENT }

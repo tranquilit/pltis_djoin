@@ -45,12 +45,16 @@ type
     // OP_PACKAGE
     fMachineRid: UInt32;
 
+    // OP_POLICY_PART
+    fGroupPolicies: TGroupPolicies;
 
     procedure FillProvision(MemCtx: PMemoryContext; var ProvisionData: TODJ_PROVISION_DATA);
     procedure FillWin7blob(var Win7Blob: TODJ_WIN7BLOB);
     procedure FillDnsPolicy(var DnsPolicy: TODJ_POLICY_DNS_DOMAIN_INFO);
     procedure FillDCInfo(var DCInfo: TDOMAIN_CONTROLLER_INFO);
     procedure FillOpPackagePartCollection(MemCtx: PMemoryContext; var OpPackagePartCollection: TOP_PACKAGE_PART_COLLECTION);
+    procedure FillPolicyPart(MemCtx: PMemoryContext; var PolicyPart: TOP_POLICY_PART);
+    procedure LoadPolicyProvider(Provider: POP_POLICY_PART);
   public
     constructor Create;
 
@@ -89,6 +93,8 @@ type
     property DCFlags: UInt32 read fDCFlags write fDCFlags;
     property DCSiteName: RawUtf8 read fDCSiteName write fDCSiteName;
     property DCClientSiteName: RawUtf8 read fDCClientSiteName write fDCClientSiteName;
+    // Group policies embedded
+    property GroupPolicies: TGroupPolicies read fGroupPolicies write fGroupPolicies;
   end;
   PDJoin = ^TDJoin;
 
@@ -251,7 +257,9 @@ begin
           Part := PackageParts^.pParts[PartId];
 
           if IsEqualGuid(Part.PartType, GUID_JOIN_PROVIDER3) then
-            MachineRid := Part.Part.JoinProv3.p^.Rid;
+            MachineRid := Part.Part.JoinProv3.p^.Rid
+          else if IsEqualGUID(Part.PartType, GUID_POLICY_PROVIDER) then
+            LoadPolicyProvider(Part.Part.PolicyProvider.p);
         end;
       end;
     end;
@@ -313,23 +321,98 @@ procedure TDJoin.FillOpPackagePartCollection(MemCtx: PMemoryContext;
   var OpPackagePartCollection: TOP_PACKAGE_PART_COLLECTION);
 var
   JoinPart: POP_JOINPROV3_PART;
+  Part: TOP_PACKAGE_PART;
+  PolicyPart: POP_POLICY_PART;
 begin
   OpPackagePartCollection.cParts := 2;
-  OpPackagePartCollection.pParts := MemCtx^.GetMem(2, SizeOf(OpPackagePartCollection.pParts^));
+  // We need a part to embed group policies
+  if Length(GroupPolicies) > 0 then
+    Inc(OpPackagePartCollection.cParts);
+  OpPackagePartCollection.pParts := MemCtx^.GetMem(OpPackagePartCollection.cParts, SizeOf(OpPackagePartCollection.pParts^));
 
-  OpPackagePartCollection.pParts[0].PartType := GUID_JOIN_PROVIDER;
-  OpPackagePartCollection.pParts[0].ulFlags := 1; // ?
-  FillZero(OpPackagePartCollection.pParts[0].Extension, SizeOf(OpPackagePartCollection.pParts[0].Extension));
-  OpPackagePartCollection.pParts[0].Part.RawBytes := MemCtx^.GetZeroedMem(SizeOf(TODJ_WIN7BLOB));
-  FillWin7blob(OpPackagePartCollection.pParts[0].Part.Win7Blob^);
+  // WIN7BLOB
+  Part := OpPackagePartCollection.pParts[0];
+  Part.PartType := GUID_JOIN_PROVIDER;
+  Part.ulFlags := 1; // Part is essential
+  FillZero(Part.Extension, SizeOf(Part.Extension));
+  Part.Part.RawBytes := MemCtx^.GetZeroedMem(SizeOf(TODJ_WIN7BLOB));
+  FillWin7blob(Part.Part.Win7Blob^);
 
-  OpPackagePartCollection.pParts[1].PartType := GUID_JOIN_PROVIDER3;
-  OpPackagePartCollection.pParts[1].ulFlags := 0; // ?
-  FillZero(OpPackagePartCollection.pParts[1].Extension, SizeOf(OpPackagePartCollection.pParts[1].Extension));
-  OpPackagePartCollection.pParts[1].Part.JoinProv3.p := MemCtx^.GetZeroedMem(SizeOf(TOP_JOINPROV3_PART));
-  JoinPart := OpPackagePartCollection.pParts[1].Part.JoinProv3.p;
+  // OP_JOINPROV3_PART (machine rid and sid)
+  Part := OpPackagePartCollection.pParts[1];
+  Part.PartType := GUID_JOIN_PROVIDER3;
+  Part.ulFlags := 0; // Part may fail
+  FillZero(Part.Extension, SizeOf(Part.Extension));
+  Part.Part.JoinProv3.p := MemCtx^.GetZeroedMem(SizeOf(TOP_JOINPROV3_PART));
+  JoinPart := Part.Part.JoinProv3.p;
   JoinPart^.Rid := MachineRid;
   JoinPart^.lpSid := Utf8ToWideString(SidToText(@DomainSID) + '-' + IntToStr(MachineRid));
+
+  /// OP_POLICY_PART (group policies)
+  if Length(GroupPolicies) = 0 then
+    Exit;
+  Part := OpPackagePartCollection.pParts[2];
+  Part.PartType := GUID_POLICY_PROVIDER;
+  Part.ulFlags := 0; // Part may fail
+  FillZero(Part.Extension, SizeOf(Part.Extension));
+  Part.Part.PolicyProvider.p := MemCtx^.GetZeroedMem(SizeOf(TOP_POLICY_PART));
+  FillPolicyPart(MemCtx, Part.Part.PolicyProvider.p^);
+end;
+
+procedure TDJoin.FillPolicyPart(MemCtx: PMemoryContext; var PolicyPart: TOP_POLICY_PART);
+var
+  i, j: Integer;
+  GP: TGroupPolicy;
+  RegVal: TRegistryValue;
+  ElementList: TOP_POLICY_ELEMENT_LIST;
+  Element: TOP_POLICY_ELEMENT;
+begin
+  FillZero(PolicyPart.Extension, SizeOf(PolicyPart.Extension));
+  PolicyPart.cElementLists := Length(GroupPolicies);
+  PolicyPart.pElementsLists := MemCtx^.GetZeroedMem(PolicyPart.cElementLists, SizeOf(PolicyPart.pElementsLists^));
+
+  for i := 0 to PolicyPart.cElementLists - 1 do
+  begin
+    GP := GroupPolicies[i];
+    ElementList := PolicyPart.pElementsLists[i];
+    ElementList.pSource := GP.Name;
+    ElementList.ulRootKeyId := $80000002; // HKEY_LOCAL_MACHINE
+    ElementList.cElements := Length(GP.Values);
+    ElementList.pElements := MemCtx^.GetZeroedMem(ElementList.cElements, SizeOf(ElementList.pElements^));
+    for j := 0 to ElementList.cElements - 1 do
+    begin
+      RegVal := GP.Values[j];
+      Element := ElementList.pElements[j];
+      Element.pKeyPath := RegVal.Key;
+      Element.pValueName := RegVal.ValueName;
+      Element.ulValueType := RegVal.ValueType;
+      Element.cbValueData := RegVal.ValueSize;
+      Element.pValueData := MemCtx^.GetMem(Element.cbValueData);
+      Move(RegVal.Value[1], Element.pValueData^, Element.cbValueData);
+    end;
+  end;
+end;
+
+procedure TDJoin.LoadPolicyProvider(Provider: POP_POLICY_PART);
+var
+  i, j: Integer;
+begin
+  SetLength(fGroupPolicies, Provider^.cElementLists);
+  for i := 0 to Provider^.cElementLists - 1 do
+  begin
+    GroupPolicies[i].Name := Provider^.pElementsLists[i].pSource;
+    SetLength(GroupPolicies[i].Values, Provider^.pElementsLists[i].cElements);
+    for j := 0 to Provider^.pElementsLists[i].cElements - 1 do
+    begin
+      GroupPolicies[i].Values[j].Key := Provider^.pElementsLists[i].pElements[j].pKeyPath;
+      GroupPolicies[i].Values[j].ValueName := Provider^.pElementsLists[i].pElements[j].pValueName;
+      GroupPolicies[i].Values[j].ValueType := Provider^.pElementsLists[i].pElements[j].ulValueType;
+      GroupPolicies[i].Values[j].ValueSize := Provider^.pElementsLists[i].pElements[j].cbValueData;
+
+      SetLength(GroupPolicies[i].Values[j].Value, GroupPolicies[i].Values[j].ValueSize);
+      Move(Provider^.pElementsLists[i].pElements[j].pValueData^, GroupPolicies[i].Values[j].Value[1], GroupPolicies[i].Values[j].ValueSize);
+    end;
+  end;
 end;
 
 procedure TDJoin.SaveToFile(Filename: TFileName);
@@ -374,6 +457,8 @@ function TDJoin.Dump: RawUtf8;
 var
   DomainGuidStr: RawUtf8;
   temp: TRawSmbiosInfo;
+  GroupPolicy: TGroupPolicy;
+  RegistryValue: TRegistryValue;
 begin
   Result := '';
   DecodeSmbiosUuid(@DomainGUID, DomainGuidStr, temp);
@@ -399,6 +484,24 @@ begin
   Append(Result, [' - Address Type: ', DCAddressType, Format(' (%d)', [ DCAddressType]), #13#10]);
   Append(Result, Format(' - Flags: 0x%x'#13#10, [DCFlags]));
   Append(Result, [' - Site Name: ', DCSiteName, #13#10]);
+
+  if Length(GroupPolicies) = 0 then
+    Exit;
+  Append(Result, CRLF+CRLF+'Embedded Group Policies:'+CRLF);
+  for GroupPolicy in GroupPolicies do
+  begin
+    Append(Result, [' - ', GroupPolicy.Name, ':', #13#10]);
+    for RegistryValue in GroupPolicy.Values do
+    begin
+      Append(Result, ['    - ', RegistryValue.Key, ' : ', RegistryValue.ValueName, ' ']);
+
+      case RegistryValue.ValueType of
+        REG_DWORD: Append(Result, [PUInt32(@RegistryValue.Value[1])^]);
+        REG_QWORD: Append(Result, [PUInt64(@RegistryValue.Value[1])^]);
+      end;
+      Append(Result, [' (', RegistryTypeToString(RegistryValue.ValueType), ' on ', RegistryValue.ValueSize, ' bytes)'#13#10]);
+    end;
+  end;
 end;
 
 procedure TDJoin.DumpToConsole;

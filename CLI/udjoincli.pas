@@ -153,7 +153,7 @@ begin
     else
       LoadFromBinary(StringFromFile(Settings.Dump.BlobFile));
     WriteLn(FormatUtf8('Parsed djoin blob from %:', [Settings.Dump.Base64]));
-    Dump;
+    DumpToConsole;
   finally
     Free;
   end;
