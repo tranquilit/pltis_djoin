@@ -71,6 +71,44 @@ type
   end;
   POP_BLOB = ^TOP_BLOB;
 
+  TOP_POLICY_ELEMENT = object
+    pKeyPath: WideString;
+    pValueName: WideString;
+    ulValueType: UInt32;
+    cbValueData: UInt32;
+    pValueData: PByte;
+
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    function NDRSize(NDRFormat: UInt32 = NDR_ScalarBuffer): SizeUInt;
+  end;
+  POP_POLICY_ELEMENT = ^TOP_POLICY_ELEMENT;
+
+  TOP_POLICY_ELEMENT_LIST = object
+    pSource: WideString;
+    ulRootKeyId: UInt32;
+    cElements: UInt32;
+    pElements: POP_POLICY_ELEMENT;
+
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    function NDRSize(NDRFormat: UInt32 = NDR_ScalarBuffer): SizeUInt;
+  end;
+  POP_POLICY_ELEMENT_LIST = ^TOP_POLICY_ELEMENT_LIST;
+
+  TOP_POLICY_PART = object
+    cElementLists: UInt32;
+    pElementsLists: POP_POLICY_ELEMENT_LIST;
+    Extension: TOP_BLOB;
+
+    procedure NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    procedure NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32 = NDR_ScalarBuffer);
+    function NDRSize(NDRFormat: UInt32 = NDR_ScalarBuffer): SizeUInt;
+  end;
+  POP_POLICY_PART = ^TOP_POLICY_PART;
+  TOP_POLICY_PART_ctr = specialize TNDRPointer<TOP_POLICY_PART>;
+  TOP_POLICY_PART_serialized_ptr = specialize TNDRCustomType<TOP_POLICY_PART_ctr>;
+
   { TODJ_POLICY_DNS_DOMAIN_INFO }
 
   TODJ_POLICY_DNS_DOMAIN_INFO = object
@@ -141,7 +179,8 @@ type
     case UInt32 of
       1: (Win7Blob: PODJ_WIN7BLOB);
       2: (JoinProv3: TOP_JOINPROV3_PART_ctr);
-      3: (RawBytes: PByte);
+      3: (PolicyProvider: TOP_POLICY_PART_ctr);
+      4: (RawBytes: PByte);
   end;
 
   { TOP_PACKAGE_PART }
@@ -272,6 +311,239 @@ begin
   WriteLn(Format('%-32s  0x%.8x : %-5s # %s', ['DS_DNS_FOREST_FLAG', DS_DNS_FOREST_FLAG, BoolToStr((Flags and DS_DNS_FOREST_FLAG) > 0, 'True', 'False'), 'DnsForestName is a DNS name']));
 end;
 
+{ TOP_POLICY_ELEMENT }
+
+procedure TOP_POLICY_ELEMENT.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
+var
+  dataSize: UInt32;
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    // pKeyPath
+    Ctx.UnpackPtr;
+    // pValueName
+    Ctx.UnpackPtr;
+    ulValueType := Ctx.UnpackUInt32;
+    cbValueData := Ctx.UnpackUInt32;
+    // pValueData
+    Ctx.UnpackPtr;
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    pKeyPath := Ctx.UnpackWideStr;
+    pValueName := Ctx.UnpackWideStr;
+    dataSize := Ctx.UnpackUInt32;
+    if dataSize <> cbValueData then
+      raise Exception.CreateFmt('Expected GPO data size and actual size differs: %d - %d', [cbValueData, dataSize]);
+    pValueData := Ctx.MemoryContext^.GetMem(dataSize);
+    Move(PByte(Ctx.Unpack(dataSize))^, pValueData[0], dataSize);
+  end;
+end;
+
+procedure TOP_POLICY_ELEMENT.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackPtr(Pointer(pKeyPath));
+    Ctx.PackPtr(Pointer(pValueName));
+    Ctx.PackUInt32(ulValueType);
+    Ctx.PackUInt32(cbValueData);
+    Ctx.PackPtr(pValueData);
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    Ctx.PackWideStr(pKeyPath);
+    Ctx.PackWideStr(pValueName);
+    Ctx.PackUInt32(cbValueData);
+    Ctx.Pack(@pValueData[0], cbValueData);
+  end;
+end;
+
+function TOP_POLICY_ELEMENT.NDRSize(NDRFormat: UInt32): SizeUInt;
+begin
+  Result := 0;
+
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Inc(Result, SizeOf(pKeyPath));
+    Inc(Result, SizeOf(pValueName));
+    Inc(Result, SizeOf(ulValueType));
+    Inc(Result, SizeOf(cbValueData));
+    Inc(Result, SizeOf(pValueData));
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    Inc(Result, NDRWideStrSize(pKeyPath));
+    Inc(Result, NDRWideStrSize(pValueName));
+    Inc(Result, SizeOf(cbValueData));
+    Inc(Result, cbValueData);
+  end;
+end;
+
+{ TOP_POLICY_ELEMENT_LIST }
+
+procedure TOP_POLICY_ELEMENT_LIST.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
+var
+  NbElements: UInt32;
+  i: Integer;
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    // pSource
+    Ctx.UnpackPtr;
+    ulRootKeyId := Ctx.UnpackUInt32;
+    cElements := Ctx.UnpackUInt32;
+    pElements := Ctx.UnpackPtr;
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    pSource := Ctx.UnpackWideStr;
+    if Assigned(pElements) then
+    begin
+      NbElements := Ctx.UnpackUInt32;
+      pElements := Ctx.MemoryContext^.GetZeroedMem(NbElements, SizeOf(pElements^));
+      for i := 0 to NbElements - 1 do
+        pElements[i].NDRUnpack(Ctx, NDR_Scalar);
+      for i := 0 to NbElements - 1 do
+        pElements[i].NDRUnpack(Ctx, NDR_Buffer);
+    end;
+  end;
+end;
+
+procedure TOP_POLICY_ELEMENT_LIST.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
+var
+  i: Integer;
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackPtr(Pointer(pSource));
+    Ctx.PackUInt32(ulRootKeyId);
+    Ctx.PackUInt32(cElements);
+    Ctx.PackPtr(pElements);
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    Ctx.PackWideStr(pSource);
+    if Assigned(pElements) then
+    begin
+      Ctx.PackUInt32(cElements);
+      for i := 0 to cElements - 1 do
+        pElements[i].NDRPack(Ctx, NDR_Scalar);
+      for i := 0 to cElements - 1 do
+        pElements[i].NDRPack(Ctx, NDR_Buffer);
+    end;
+  end;
+end;
+
+function TOP_POLICY_ELEMENT_LIST.NDRSize(NDRFormat: UInt32): SizeUInt;
+var
+  i: Integer;
+begin
+  Result := 0;
+
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Inc(Result, SizeOf(pSource));
+    Inc(Result, SizeOf(ulRootKeyId));
+    Inc(Result, SizeOf(cElements));
+    Inc(Result, SizeOf(pElements));
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    Inc(Result, NDRWideStrSize(pSource));
+    Inc(Result, SizeOf(cElements));
+
+    for i := 0 to cElements - 1 do
+      Inc(Result, pElements[i].NDRSize(NDR_Scalar));
+    for i := 0 to cElements - 1 do
+      Inc(Result, pElements[i].NDRSize(NDR_Buffer));
+  end;
+end;
+
+{ TOP_POLICY_PART }
+
+procedure TOP_POLICY_PART.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
+var
+  NbElementLists: UInt32;
+  i: Integer;
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    cElementLists := Ctx.UnpackUInt32;
+    pElementsLists := Ctx.UnpackPtr;
+    Extension.NDRUnpack(Ctx, NDR_Scalar);
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    if Assigned(pElementsLists) then
+    begin
+      NbElementLists := Ctx.UnpackUInt32;
+      pElementsLists := Ctx.MemoryContext^.GetZeroedMem(NbElementLists, SizeOf(pElementsLists^));
+      for i := 0 to NbElementLists - 1 do
+        pElementsLists[i].NDRUnpack(Ctx, NDR_Scalar);
+      for i := 0 to NbElementLists - 1 do
+        pElementsLists[i].NDRUnpack(Ctx, NDR_Buffer);
+    end;
+  end;
+end;
+
+procedure TOP_POLICY_PART.NDRPack(Ctx: TNDRPackContext; NDRFormat: UInt32);
+var
+  i: Integer;
+begin
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Ctx.PackUInt32(cElementLists);
+    Ctx.PackPtr(pElementsLists);
+    Extension.NDRPack(Ctx, NDR_Scalar);
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    if Assigned(pElementsLists) then
+    begin
+      Ctx.PackUInt32(cElementLists);
+      for i := 0 to cElementLists - 1 do
+        pElementsLists[i].NDRPack(Ctx, NDR_Scalar);
+      for i := 0 to cElementLists - 1 do
+        pElementsLists[i].NDRPack(Ctx, NDR_Buffer);
+    end;
+    Extension.NDRPack(Ctx, NDR_Buffer);
+  end;
+end;
+
+function TOP_POLICY_PART.NDRSize(NDRFormat: UInt32): SizeUInt;
+var
+  i: Integer;
+begin
+  Result := 0;
+
+  if (NDRFormat and NDR_Scalar) > 0 then
+  begin
+    Inc(Result, SizeOf(cElementLists));
+    Inc(Result, SizeOf(pElementsLists));
+    Inc(Result, Extension.NDRSize(NDR_Scalar));
+  end;
+
+  if (NDRFormat and NDR_Buffer) > 0 then
+  begin
+    Inc(Result, SizeOf(cElementLists));
+
+    for i := 0 to cElementLists - 1 do
+      Inc(Result, pElementsLists[i].NDRSize(NDR_Scalar));
+    for i := 0 to cElementLists - 1 do
+      Inc(Result, pElementsLists[i].NDRSize(NDR_Buffer));
+    Inc(Result, Extension.NDRSize(NDR_Buffer));
+  end;
+end;
+
 { TOP_JOINPROV3_PART }
 
 procedure TOP_JOINPROV3_PART.NDRUnpack(Ctx: TNDRUnpackContext; NDRFormat: UInt32);
@@ -342,9 +614,9 @@ begin
       if IsEqualGuid(PartType, GUID_JOIN_PROVIDER) then
         TODJ_WIN7BLOB_serialized.NDRUnpack(Ctx, Part.Win7Blob^)
       else if IsEqualGuid(PartType, GUID_JOIN_PROVIDER3) then
-      begin
-        TOP_JOINPROV3_PART_serialized_ptr.NDRUnpack(Ctx, Part.JoinProv3);
-      end;
+        TOP_JOINPROV3_PART_serialized_ptr.NDRUnpack(Ctx, Part.JoinProv3)
+      else if IsEqualGuid(PartType, GUID_POLICY_PROVIDER) then
+        TOP_POLICY_PART_serialized_ptr.NDRUnpack(Ctx, Part.PolicyProvider);
       Ctx.Current := PreviousOffset + Size;
     end;
   end;
@@ -370,7 +642,9 @@ begin
       if IsEqualGuid(PartType, GUID_JOIN_PROVIDER) then
         TODJ_WIN7BLOB_serialized.NDRPack(Ctx, Part.Win7Blob^)
       else if IsEqualGuid(PartType, GUID_JOIN_PROVIDER3) then
-        TOP_JOINPROV3_PART_serialized_ptr.NDRPack(Ctx, Part.JoinProv3);
+        TOP_JOINPROV3_PART_serialized_ptr.NDRPack(Ctx, Part.JoinProv3)
+      else if IsEqualGuid(PartType, GUID_POLICY_PROVIDER) then
+        TOP_POLICY_PART_serialized_ptr.NDRPack(Ctx, Part.PolicyProvider);
     end;
   end;
 end;
@@ -405,7 +679,9 @@ begin
   if IsEqualGuid(PartType, GUID_JOIN_PROVIDER) then
     Inc(Result, TODJ_WIN7BLOB_serialized.NDRSize(Part.Win7Blob^))
   else if IsEqualGuid(PartType, GUID_JOIN_PROVIDER3) then
-    Inc(Result, TOP_JOINPROV3_PART_serialized_ptr.NDRSize(part.JoinProv3));
+    Inc(Result, TOP_JOINPROV3_PART_serialized_ptr.NDRSize(part.JoinProv3))
+  else if IsEqualGuid(PartType, GUID_POLICY_PROVIDER) then
+    Inc(Result, TOP_POLICY_PART_serialized_ptr.NDRSize(part.PolicyProvider));
 end;
 
 { TOP_PACKAGE_PART_COLLECTION }
