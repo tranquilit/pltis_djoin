@@ -294,6 +294,8 @@ begin
 end;
 
 class function TDJoinCLI.GetHelp(ExeDesc: Boolean): RawUtf8;
+var
+  ConfigParametersDoc: String;
 begin
   with Executable.Command do
   begin
@@ -309,20 +311,45 @@ begin
         Param('blob', 'Filepath of a djoin binary blob (not base64 encoded). Mostly used for debug');
       end else if Args[0] = 'create' then
       begin
-        Param(['c', 'config'], 'Configuration json (filepath or base64) of the config to use. The following values are required:'#10#9#9#9+
-          '- MachineDomainName: The domain name of the machine (ex: my.domain.lan)'#10#9#9#9+
-          '- MachineName: The name of the machine (ex: my-computer)'#10#9#9#9+
-          '- MachinePassword: The password of the machine (ex: mysuperpwd)'#10#9#9#9+
-          '- MachineRid: The machine account RID (ex: 1130)'#10#9#9#9+
-          '- NetbiosDomainName: The netbios domain name (ex: MYDOMAIN)'#10#9#9#9+
-          '- DnsDomainName: The Dns domain (ex: my.domain.lan)'#10#9#9#9+
-          '- DnsForestName: The forest domain name (ex: my.domain.lan)'#10#9#9#9+
-          '- DomainGUID: The domain GUID (ex: 58691904-1932-4bc4-96a5-552942191d94)'#10#9#9#9+
-          '- DomainSID: The domain SID (ex: S-1-5-21-157379786-3592381142-1446019043)'#10#9#9#9+
-          '- DCName: The domain controller name (ex: \\bullseyex64.ad.company.it)'#10#9#9#9+
-          '- DCAddress: The domain controller address (ex: \\192.168.42.42)'#10#9#9#9+
-          '- DCSiteName: The domain controller site name (default: Default-First-Site-Name)'#10#9#9#9+
-          '- DCClientSiteName: The domain controller client site name (default: Default-First-Site-Name)');
+        ConfigParametersDoc := 'Configuration json (filepath or base64) of the config to use.'#10#9#9+
+          'Required values:'#10#9#9#9+
+            '- MachineName: The name of the machine (ex: my-computer)';
+
+
+        if not Option('ldap') then
+        begin
+          ConfigParametersDoc := ConfigParametersDoc +#10#9#9#9 +
+            '- MachineDomainName: The domain name of the machine (ex: my.domain.lan)'#10#9#9#9+
+            '- MachinePassword: The password of the machine (ex: mysuperpwd)'#10#9#9#9+
+            '- MachineRid: The machine account RID (ex: 1130)'#10#9#9#9+
+            '- NetbiosDomainName: The netbios domain name (ex: MYDOMAIN)'#10#9#9#9+
+            '- DnsDomainName: The Dns domain (ex: my.domain.lan)'#10#9#9#9+
+            '- DnsForestName: The forest domain name (ex: my.domain.lan)'#10#9#9#9+
+            '- DomainGUID: The domain GUID (ex: 58691904-1932-4bc4-96a5-552942191d94)'#10#9#9#9+
+            '- DomainSID: The domain SID (ex: S-1-5-21-157379786-3592381142-1446019043)'#10#9#9#9+
+            '- DCName: The domain controller name (ex: \\bullseyex64.ad.company.it)'#10#9#9#9+
+            '- DCAddress: The domain controller address (ex: \\192.168.42.42)'#10#9#9+
+          'Optional values:'#10#9#9#9 +
+            '- DCSiteName: The domain controller site name (default: Default-First-Site-Name)'#10#9#9#9+
+            '- DCClientSiteName: The domain controller client site name (default: Default-First-Site-Name)';
+        end else
+        begin
+          ConfigParametersDoc := ConfigParametersDoc +#10#9#9 +
+          'Optional values:'#10#9#9#9 +
+            '- MachineOU: Machine parent OU (ex: OU=domain,DC=my,DC=domain,DC=lan). Default to COMPUTRS_CONTAINER well known object'#10#9#9#9+
+            '- MachinePassword: The password of the machine (ex: mysuperpwd). Default to a randomly generated 120 bytes password'#10#9#9#9+
+            '- TargetHost: Server address (ex: my.domain.lan). Default to current machine domain'#10#9#9#9+
+            '- TargetPort: Server port (ex: 389). Default to 636'#10#9#9#9+
+            '- UserName: LDAP username (ex: muser@my.domain.lan). Default to current user'#10#9#9#9+
+            '- Password: LDAP password (ex: mypasswd). Not required if authenticating with kerberos'#10#9#9#9+
+            '- KerberosDN: Kerberos canonical domain name (ex: my.domain.lan). Required if different than TargetHost'#10#9#9#9+
+            '- Timeout: Timeout for operations in milliseconds (default: 5000)'#10#9#9#9+
+            '- Tls: Whether the connection with the server must be secured through TLS (default: false)'#10#9#9#9+
+            '- AllowUnsafePasswordBind: Whether sending password for bind on a non Tls connection is allowed (default: false)'#10#9#9#9+
+            '- OnlyKerberos: Whether kerberos bind is the only authorized bind (default: true)';
+        end;
+
+        Param(['c', 'config'], ConfigParametersDoc);
         Param(['o', 'output'], 'Output file', 'djoin.txt');
         Option(['f', 'force'], 'Doesn''t ask user confirmation (assume yes for all questions)');
         if Option('ldap', 'Connect to domain through ldap to complete djoin informations. See "djoin create -ldap -h" for more informations') then
