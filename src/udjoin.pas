@@ -66,6 +66,11 @@ type
     function LoadFromLDAP(ldap: TLdapClient; ComputerName, DN: RawUtf8; Password: SpiUtf8; DomainController: RawUtf8 = ''; Address: RawUtf8 = '';
       HostActionIfExists: TActionIfExists = aieFail): Boolean;
 
+    // Group policies
+    function AddGroupPolicyFromGPT(Name: RawUtf8; GPT: RawUtf8): Integer;
+    function AddGroupPolicyFromRegistryFile(Name: RawUtf8; const content: RawByteString): Integer;
+    function AddGroupPoliciesFromLdap(Ldap: TLdapClient; DisplayName: RawUtf8 = ''; Guid: RawUtf8 = ''): Integer;
+
     function LoadFromProvisionData(const ProvisionData: TODJ_PROVISION_DATA): Boolean;
     procedure SaveToFile(Filename: TFileName);
     function GetBlob(EncodeUtf16: Boolean = True): RawByteString;
@@ -210,6 +215,134 @@ begin
   DCSiteName := SiteName;
   DCClientSiteName := SiteName;
   Result := True;
+end;
+
+function TDJoin.AddGroupPoliciesFromLdap(Ldap: TLdapClient; DisplayName: RawUtf8; Guid: RawUtf8): Integer;
+var
+  Filter: RawUtf8;
+  Policy: TLdapResult;
+begin
+  Result := -1;
+  if not ldap.Connected then
+    Exit;
+  Filter := '';// '(objectClass=groupPolicyContainer)';
+  if (DisplayName <> '*') and (DisplayName <> '') then
+     Filter := Format('(displayName=%s)', [DisplayName]);
+  // TODO: Check if GUID is valid
+  if (Guid <> '*') and (Guid <> '') then
+     Filter := Format('%s(cn=%s)', [Guid]);
+  if Filter <> '' then
+     Filter := Format('(&(objectClass=groupPolicyContainer)%s)', [Filter])
+  else
+     Filter := '(objectClass=groupPolicyContainer)';
+
+  if not ldap.Search(ldap.DefaultDN, False, Filter, ['displayName', 'cn', 'gPCFileSysPath']) then
+    Exit;
+  Result := 0;
+  for Policy in ldap.SearchResult.Items  do
+    if AddGroupPolicyFromGPT(Policy.Attributes.Find('displayName').GetReadable, Policy.Attributes.Find('gPCFileSysPath').GetReadable) <> -1 then
+      Inc(Result);
+end;
+
+function TDJoin.AddGroupPolicyFromGPT(Name: RawUtf8; GPT: RawUtf8): Integer;
+var
+  RegistryFile: TFileName;
+begin
+  Result := -1;
+  RegistryFile := MakePath([GPT, 'Machine', 'Registry.pol']);
+  WriteLn('Add GPO "', Name, '" from GPT "', GPT, '"');
+  if not FileExists(RegistryFile) then
+  begin
+    WriteLn('Cannot access registry file "', RegistryFile, '", GPO skipped');
+    Exit;
+  end;
+  Result := AddGroupPolicyFromRegistryFile(Name, StringFromFile(RegistryFile));
+end;
+
+function TDJoin.AddGroupPolicyFromRegistryFile(Name: RawUtf8; const content: RawByteString): Integer;
+const
+  REGFILE_SIGNATURE = 'PReg'#1#0#0#0;
+var
+  Policy: TGroupPolicy;
+  RegValue: TRegistryValue;
+  Idx: Integer;
+
+  function _PrepareRead(Delimiter: RawUtf8 = ';'#0): Integer;
+  begin
+    Result := -1;
+    if (content[Idx] = ';') or (content[Idx] = '[') then
+      Inc(Idx, 2);
+    if content[Idx] = ']' then
+      Exit;
+    Result := Pos(Delimiter, content, Idx);
+  end;
+
+  function ReadWideString(Delimiter: RawUtf8 = ';'#0): RawUtf8;
+  var
+    EndOfPart: SizeInt;
+  begin
+    Result := '';
+    EndOfPart := _PrepareRead(Delimiter);
+    if EndOfPart = -1 then
+      Exit;
+    Result := RawUnicodeToUtf8(@content[Idx], (EndOfPart - Idx) div 2);
+    Idx := EndOfPart;
+  end;
+
+  function ReadBuffer(BufferSize: SizeInt; var Buffer; Delimiter: RawUtf8 = ';'#0): Boolean;
+  var
+    EndOfPart: SizeInt;
+  begin
+    Result := False;
+    EndOfPart := _PrepareRead(Delimiter);
+    if (EndOfPart = -1) or (EndOfPart - Idx <> BufferSize) then
+      Exit;
+    Move(content[Idx], Buffer, BufferSize);
+    Result := True;
+    Idx := EndOfPart;
+  end;
+
+begin
+  Result := -1;
+  if content = '' then
+    Exit;
+  if (Length(content) < Length(REGFILE_SIGNATURE)) or
+     (not CompareMem(@content[1], @REGFILE_SIGNATURE[1], Length(REGFILE_SIGNATURE))) then
+    Exit;
+  Idx := 1 + Length(REGFILE_SIGNATURE);
+  while Idx < Length(content) do
+  begin
+    // Format  [key;value;type;size;data] in utf16
+    if content[Idx] <> '[' then
+    begin
+      WriteLn('Expected opening [ at ', Idx);
+      Exit;
+    end;
+    // Key
+    RegValue.Key := ReadWideString;
+    RegValue.ValueName := ReadWideString;
+
+    if not (ReadBuffer(SizeOf(RegValue.ValueType), RegValue.ValueType) and
+      ReadBuffer(SizeOf(RegValue.ValueSize), RegValue.ValueSize)) then
+      continue;
+    begin
+      SetLength(RegValue.Value, RegValue.ValueSize);
+      ReadBuffer(RegValue.ValueSize, RegValue.Value[1], ']'#0);
+    end;
+
+    if content[Idx] <> ']' then
+    begin
+      WriteLn('Expected closing ] at ', Idx);
+      Exit;
+    end;
+    Inc(Idx, 2);
+
+    SetLength(Policy.Values, Length(Policy.Values) + 1);
+    Policy.Values[Length(Policy.Values) - 1] := RegValue;
+  end;
+  Result := Length(GroupPolicies);
+  SetLength(fGroupPolicies, Result + 1);
+  GroupPolicies[Result] := Policy;
 end;
 
 function TDJoin.LoadFromProvisionData(const ProvisionData: TODJ_PROVISION_DATA
