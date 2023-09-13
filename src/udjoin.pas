@@ -76,7 +76,7 @@ type
     function GetBlob(EncodeUtf16: Boolean = True): RawByteString;
 
 
-    function Dump: RawUtf8;
+    function Dump(DumpGpoRegistryValues: Boolean = False): RawUtf8;
     procedure DumpToConsole;
 
     // Machine Informations
@@ -230,7 +230,7 @@ begin
      Filter := Format('(displayName=%s)', [DisplayName]);
   // TODO: Check if GUID is valid
   if (Guid <> '*') and (Guid <> '') then
-     Filter := Format('%s(cn=%s)', [Guid]);
+     Filter := Format('%s(cn=%s)', [Filter, Guid]);
   if Filter <> '' then
      Filter := Format('(&(objectClass=groupPolicyContainer)%s)', [Filter])
   else
@@ -250,7 +250,8 @@ var
 begin
   Result := -1;
   RegistryFile := MakePath([GPT, 'Machine', 'Registry.pol']);
-  WriteLn('Add GPO "', Name, '" from GPT "', GPT, '"');
+  if Executable.Command.Option(['v', 'verbose']) then
+    WriteLn('Add GPO "', Name, '" from GPT "', GPT, '"');
   if not FileExists(RegistryFile) then
   begin
     WriteLn('Cannot access registry file "', RegistryFile, '", GPO skipped');
@@ -342,6 +343,7 @@ begin
   end;
   Result := Length(GroupPolicies);
   SetLength(fGroupPolicies, Result + 1);
+  Policy.Name := Name;
   GroupPolicies[Result] := Policy;
 end;
 
@@ -586,7 +588,7 @@ begin
   end;
 end;
 
-function TDJoin.Dump: RawUtf8;
+function TDJoin.Dump(DumpGpoRegistryValues: Boolean): RawUtf8;
 var
   DomainGuidStr: RawUtf8;
   temp: TRawSmbiosInfo;
@@ -623,7 +625,13 @@ begin
   Append(Result, CRLF+CRLF+'Embedded Group Policies:'+CRLF);
   for GroupPolicy in GroupPolicies do
   begin
-    Append(Result, [' - ', GroupPolicy.Name, ':', #13#10]);
+    Append(Result, [' - ', GroupPolicy.Name]);
+    if not DumpGpoRegistryValues then
+    begin
+      Append(Result, [#13#10]);
+      continue;
+    end;
+    Append(Result, [':', #13#10]);
     for RegistryValue in GroupPolicy.Values do
     begin
       Append(Result, ['    - ', RegistryValue.Key, ' : ', RegistryValue.ValueName, ' ']);
@@ -639,7 +647,7 @@ end;
 
 procedure TDJoin.DumpToConsole;
 begin
-  WriteLn(Dump);
+  WriteLn(Dump(True));
 end;
 
 { TDJoinParser }

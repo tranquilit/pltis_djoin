@@ -168,6 +168,7 @@ var
   StrSid: RawUtf8;
   LdapSettings: TLdapClientSettings;
   Ldap: TLdapClient;
+  GroupPolicy: PVariant;
 begin
   if FileExists(Settings.Create.Config) then
     ConfigStr := StringFromFile(Settings.Create.Config)
@@ -235,6 +236,10 @@ begin
                            VarToStr(ConfigDV.GetValueOrDefault('MachinePassword', '')),
                            '', '',
                            Settings.Create.ActionIfExists);
+        for GroupPolicy in ConfigDV.A['GroupPoliciesDisplayNames']^.Items do
+          AddGroupPoliciesFromLdap(Ldap, VarToStr(GroupPolicy^));
+        for GroupPolicy in ConfigDV.A['GroupPoliciesGUIDs']^.Items do
+          AddGroupPoliciesFromLdap(Ldap, '', VarToStr(GroupPolicy^)) ;
       end
       else
       begin
@@ -281,7 +286,7 @@ begin
         Exit;
       end;
     end;
-    if AskConfirmation(FormatUtf8('Save following djoin blob as % ?', [Settings.Create.Output]) + CRLF + Dump) then
+    if AskConfirmation(FormatUtf8('Save following djoin blob as % ?', [Settings.Create.Output]) + CRLF + Dump(Executable.Command.Option(['v', 'verbose']))) then
       SaveToFile(Settings.Create.Output);
   finally
     Free;
@@ -360,7 +365,9 @@ begin
             '- Timeout: Timeout for operations in milliseconds (default: 5000)'#10#9#9#9+
             '- Tls: Whether the connection with the server must be secured through TLS (default: false)'#10#9#9#9+
             '- AllowUnsafePasswordBind: Whether sending password for bind on a non Tls connection is allowed (default: false)'#10#9#9#9+
-            '- OnlyKerberos: Whether kerberos bind is the only authorized bind (default: true)';
+            '- OnlyKerberos: Whether kerberos bind is the only authorized bind (default: true)'#10#9#9#9+
+            '- GroupPoliciesDisplayNames: List of GPO display names (default: empty)'#10#9#9#9+
+            '- GroupPoliciesGUIDs: List of GPO GUIDs (default: empty)';
         end;
 
         Param(['c', 'config'], ConfigParametersDoc);
