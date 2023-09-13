@@ -163,6 +163,7 @@ procedure TDJoinCLI.CreateBlob;
 var
   ConfigDV: TDocVariantData;
   ConfigStr: RawByteString;
+  LdapPassword: SpiUtf8;
   dsid: TSid;
   StrSid: RawUtf8;
   LdapSettings: TLdapClientSettings;
@@ -186,7 +187,19 @@ begin
     LdapSettings.TargetPort := ConfigDV.GetValueOrDefault('TargetPort', '389');
     LdapSettings.UserName := ConfigDV.GetValueOrDefault('Username', '');
     if LdapSettings.UserName <> '' then
-      LdapSettings.Password := VarToStr(ConfigDV.GetValueOrDefault('Password', ''));
+    begin
+      LdapSettings.Password := Trim(Executable.Command.Param(['p', 'password']));
+      if Executable.Command.Option(['p', 'password']) then
+      begin
+        WriteLn('LDAP Password:');
+        // TODO: Replace the ReadLn by a future "ReadPassword" in mORMot hiding the written password
+        ReadLn(LdapPassword);
+        LdapSettings.Password := Trim(LdapPassword);
+        LdapPassword := '';
+      end;
+      if (LdapSettings.Password = '') then
+        LdapSettings.Password := Trim(VarToStr(ConfigDV.GetValueOrDefault('Password', '')));
+    end;
     LdapSettings.KerberosDN := ConfigDV.GetValueOrDefault('KerberosDN', '');
     LdapSettings.Timeout := ConfigDV.GetValueOrDefault('Timeout', 5000);
     LdapSettings.Tls := ConfigDV.GetValueOrDefault('Tls', False);
@@ -334,6 +347,7 @@ begin
             '- DCClientSiteName: The domain controller client site name (default: Default-First-Site-Name)';
         end else
         begin
+          Param(['p', 'password'], 'LDAP Password. Read from stdin if no value provided. Has priority over the config file');
           ConfigParametersDoc := ConfigParametersDoc +#10#9#9 +
           'Optional values:'#10#9#9#9 +
             '- MachineOU: Machine parent OU (ex: OU=domain,DC=my,DC=domain,DC=lan). Default to COMPUTRS_CONTAINER well known object'#10#9#9#9+
