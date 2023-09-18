@@ -17,6 +17,7 @@ const
   NDR_Scalar = $1;
   NDR_Buffer = $2;
   NDR_ScalarBuffer = $3;
+  NDR_PointerSize = 4;
 
 type
   {$A-} // every record (or object) is packed from now on
@@ -456,7 +457,7 @@ begin
   Result := 0;
 
   if (NDRFormat and NDR_Scalar) > 0 then
-    Inc(Result, SizeOf(p));
+    Inc(Result, NDR_PointerSize);
 
   if (NDRFormat and NDR_Buffer) > 0 then
     if Assigned(p) then

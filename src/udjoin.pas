@@ -559,7 +559,7 @@ begin
   if EncodeUtf16 then
   begin
     Insert(#$ff#$fe, Blob, 1);
-    Append(Blob, #0);
+    Append(Blob, #0#0);
   end;
   FileFromString(Blob, Filename);
 end;
@@ -689,8 +689,9 @@ var
   Base64: RawUtf8;
   Binary: RawByteString;
 begin
+  // Starts at 2 because of the BOM, and remove 2 because of BOM and null bytes at the end
   if Unicode then
-    Base64 := RawUnicodeToUtf8(pointer(FileContent), Length(WideString(FileContent)) div 2 - 1)
+    Base64 := RawUnicodeToUtf8(@FileContent[3], Length(FileContent) div 2 - 2)
   else
     Base64 := FileContent;
   Binary := Base64toBin(Base64);

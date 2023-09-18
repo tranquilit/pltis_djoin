@@ -635,7 +635,7 @@ begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
     Inc(Result, SizeOf(Rid));
-    Inc(Result, SizeOf(lpSid));
+    Inc(Result, NDR_PointerSize);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
@@ -715,7 +715,7 @@ begin
     Inc(Result, SizeOf(PartType));
     Inc(Result, SizeOf(ulFlags));
     Inc(Result, SizeOf(PartLen));
-    Inc(Result, SizeOf(Part.RawBytes));
+    Inc(Result, NDR_PointerSize);
     Inc(Result, Extension.NDRSize(NDR_Scalar));
   end;
 
@@ -805,7 +805,7 @@ begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
     Inc(Result, SizeOf(cParts));
-    Inc(Result, SizeOf(Pointer));
+    Inc(Result, NDR_PointerSize);
     Inc(Result, Extension.NDRSize(NDR_Scalar));
   end;
 
@@ -867,7 +867,7 @@ begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
     Inc(Result, SizeOf(cbBlob));
-    Inc(Result, SizeOf(pPackagePartCollection));
+    Inc(Result, NDR_PointerSize);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
@@ -929,7 +929,7 @@ begin
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
     Inc(Result, SizeOf(cbBlob));
-    Inc(Result, SizeOf(pBlob));
+    Inc(Result, NDR_PointerSize);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
@@ -1072,15 +1072,15 @@ begin
 
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
-    Inc(Result, SizeOf(dc_unc));
-    Inc(Result, SizeOf(dc_address));
+    Inc(Result, NDR_PointerSize);
+    Inc(Result, NDR_PointerSize);
     Inc(Result, SizeOf(dc_address_type));
     Inc(Result, SizeOf(domain_guid));
-    Inc(Result, SizeOf(domain_name));
-    Inc(Result, SizeOf(forest_name));
+    Inc(Result, NDR_PointerSize);
+    Inc(Result, NDR_PointerSize);
     Inc(Result, SizeOf(dc_flags));
-    Inc(Result, SizeOf(dc_site_name));
-    Inc(Result, SizeOf(client_site_name));
+    Inc(Result, NDR_PointerSize);
+    Inc(Result, NDR_PointerSize);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
@@ -1106,7 +1106,7 @@ begin
   begin
     Inc(Result, SizeOf(Length));
     Inc(Result, SizeOf(MaximumLength));
-    Inc(Result, SizeOf(Buffer));
+    Inc(Result, NDR_PointerSize);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
@@ -1222,7 +1222,7 @@ begin
     Inc(Result, DnsDomainName.NDRSize(NDR_Scalar));
     Inc(Result, DnsForestName.NDRSize(NDR_Scalar));
     Inc(Result, SizeOf(DomainGuid));
-    Inc(Result, SizeOf(Sid));
+    Inc(Result, NDR_PointerSize);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
@@ -1298,9 +1298,9 @@ begin
 
   if (NDRFormat and NDR_Scalar) > 0 then
   begin
-    Inc(Result, SizeOf(lpDomain));
-    Inc(Result, SizeOf(lpMachineName));
-    Inc(Result, SizeOf(lpMachinePassword));
+    Inc(Result, NDR_PointerSize);
+    Inc(Result, NDR_PointerSize);
+    Inc(Result, NDR_PointerSize);
     Inc(Result, SizeOf(Padding));
     Inc(Result, DnsDomainInfo.NDRSize(NDR_Scalar));
     Inc(Result, DcInfo.NDRSize(NDR_Scalar));
@@ -1381,7 +1381,7 @@ begin
   begin
     Inc(Result, SizeOf(ulODJFormat));
     Inc(Result, SizeOf(cbBlob));
-    Inc(Result, SizeOf(pBlob.RawBytes));
+    Inc(Result, NDR_PointerSize);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
@@ -1470,7 +1470,7 @@ begin
   begin
     Inc(Result, SizeOf(Version));
     Inc(Result, SizeOf(ulcBlobs));
-    Inc(Result, SizeOf(pBlobs));
+    Inc(Result, NDR_PointerSize);
   end;
 
   if (NDRFormat and NDR_Buffer) > 0 then
