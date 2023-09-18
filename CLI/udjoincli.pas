@@ -221,9 +221,6 @@ begin
       end;
   end;
 
-  // Raise if value is missing
-  ConfigDV.Options := [dvoValueCopiedByReference];
-
   with TDJoin.Create do
   try
     try
@@ -231,6 +228,8 @@ begin
       if Settings.Create.UseLdap then
       begin
         // Compute OU if not given
+        if ConfigDV.S['MachineName'] = '' then
+          raise EDocVariant.Create('[MachineName] property not found');
         LoadFromLDAP(Ldap, ConfigDV.S['MachineName'],
                            VarToStr(ConfigDV.GetValueOrDefault('MachineOU', '')),
                            VarToStr(ConfigDV.GetValueOrDefault('MachinePassword', '')),
@@ -243,8 +242,13 @@ begin
       end
       else
       begin
+        // Raise if value is missing
+        ConfigDV.Options := [dvoValueCopiedByReference];
+
         MachineName := ConfigDV.S['MachineName'];
         MachinePassword := ConfigDV.S['MachinePassword'];
+        if MachinePassword = '' then
+          MachinePassword := GetRandomPassword;
 
 
         MachineDomainName := ConfigDV.S['MachineDomainName'];
@@ -287,7 +291,7 @@ begin
       end;
     end;
     if AskConfirmation(FormatUtf8('Save following djoin blob as % ?', [Settings.Create.Output]) + CRLF + Dump(Executable.Command.Option(['v', 'verbose']))) then
-      SaveToFile(Settings.Create.Output);
+      SaveToFile(Settings.Create.Output, Settings.Unicode);
   finally
     Free;
   end;

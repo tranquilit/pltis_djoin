@@ -72,7 +72,7 @@ type
     function AddGroupPoliciesFromLdap(Ldap: TLdapClient; DisplayName: RawUtf8 = ''; Guid: RawUtf8 = ''): Integer;
 
     function LoadFromProvisionData(const ProvisionData: TODJ_PROVISION_DATA): Boolean;
-    procedure SaveToFile(Filename: TFileName);
+    procedure SaveToFile(Filename: TFileName; EncodeUtf16: Boolean = True);
     function GetBlob(EncodeUtf16: Boolean = True): RawByteString;
 
 
@@ -456,7 +456,7 @@ procedure TDJoin.FillOpPackagePartCollection(MemCtx: PMemoryContext;
   var OpPackagePartCollection: TOP_PACKAGE_PART_COLLECTION);
 var
   JoinPart: POP_JOINPROV3_PART;
-  Part: TOP_PACKAGE_PART;
+  Part: POP_PACKAGE_PART;
   PolicyPart: POP_POLICY_PART;
 begin
   OpPackagePartCollection.cParts := 2;
@@ -466,32 +466,32 @@ begin
   OpPackagePartCollection.pParts := MemCtx^.GetMem(OpPackagePartCollection.cParts, SizeOf(OpPackagePartCollection.pParts^));
 
   // WIN7BLOB
-  Part := OpPackagePartCollection.pParts[0];
-  Part.PartType := GUID_JOIN_PROVIDER;
-  Part.ulFlags := 1; // Part is essential
-  FillZero(Part.Extension, SizeOf(Part.Extension));
-  Part.Part.RawBytes := MemCtx^.GetZeroedMem(SizeOf(TODJ_WIN7BLOB));
-  FillWin7blob(Part.Part.Win7Blob^);
+  Part := @OpPackagePartCollection.pParts[0];
+  Part^.PartType := GUID_JOIN_PROVIDER;
+  Part^.ulFlags := 1; // Part is essential
+  FillZero(Part^.Extension, SizeOf(Part^.Extension));
+  Part^.Part.RawBytes := MemCtx^.GetZeroedMem(SizeOf(TODJ_WIN7BLOB));
+  FillWin7blob(Part^.Part.Win7Blob^);
 
   // OP_JOINPROV3_PART (machine rid and sid)
-  Part := OpPackagePartCollection.pParts[1];
-  Part.PartType := GUID_JOIN_PROVIDER3;
-  Part.ulFlags := 0; // Part may fail
-  FillZero(Part.Extension, SizeOf(Part.Extension));
-  Part.Part.JoinProv3.p := MemCtx^.GetZeroedMem(SizeOf(TOP_JOINPROV3_PART));
-  JoinPart := Part.Part.JoinProv3.p;
+  Part := @OpPackagePartCollection.pParts[1];
+  Part^.PartType := GUID_JOIN_PROVIDER3;
+  Part^.ulFlags := 0; // Part may fail
+  FillZero(Part^.Extension, SizeOf(Part^.Extension));
+  Part^.Part.JoinProv3.p := MemCtx^.GetZeroedMem(SizeOf(TOP_JOINPROV3_PART));
+  JoinPart := Part^.Part.JoinProv3.p;
   JoinPart^.Rid := MachineRid;
   JoinPart^.lpSid := Utf8ToWideString(SidToText(@DomainSID) + '-' + IntToStr(MachineRid));
 
   /// OP_POLICY_PART (group policies)
   if Length(GroupPolicies) = 0 then
     Exit;
-  Part := OpPackagePartCollection.pParts[2];
-  Part.PartType := GUID_POLICY_PROVIDER;
-  Part.ulFlags := 0; // Part may fail
-  FillZero(Part.Extension, SizeOf(Part.Extension));
-  Part.Part.PolicyProvider.p := MemCtx^.GetZeroedMem(SizeOf(TOP_POLICY_PART));
-  FillPolicyPart(MemCtx, Part.Part.PolicyProvider.p^);
+  Part := @OpPackagePartCollection.pParts[2];
+  Part^.PartType := GUID_POLICY_PROVIDER;
+  Part^.ulFlags := 0; // Part may fail
+  FillZero(Part^.Extension, SizeOf(Part^.Extension));
+  Part^.Part.PolicyProvider.p := MemCtx^.GetZeroedMem(SizeOf(TOP_POLICY_PART));
+  FillPolicyPart(MemCtx, Part^.Part.PolicyProvider.p^);
 end;
 
 procedure TDJoin.FillPolicyPart(MemCtx: PMemoryContext; var PolicyPart: TOP_POLICY_PART);
@@ -550,14 +550,17 @@ begin
   end;
 end;
 
-procedure TDJoin.SaveToFile(Filename: TFileName);
+procedure TDJoin.SaveToFile(Filename: TFileName; EncodeUtf16: Boolean);
 var
   Blob: RawByteString;
 begin
-  Blob := GetBlob;
+  Blob := GetBlob(EncodeUtf16);
   // Insert BOM
-  Insert(#$ff#$fe, Blob, 1);
-  Append(Blob, #0#0);
+  if EncodeUtf16 then
+  begin
+    Insert(#$ff#$fe, Blob, 1);
+    Append(Blob, #0);
+  end;
   FileFromString(Blob, Filename);
 end;
 
@@ -677,7 +680,7 @@ end;
 class function TDJoinParser.ParseFile(FileName: TFileName; var DJoin: TDJoin;
   Unicode: Boolean): Boolean;
 begin
-  Result := ParseFileContent(StringFromFile(Filename), DJoin, Unicode);
+  Result := ParseFileContent(StringFromFile(Filename, True), DJoin, Unicode);
 end;
 
 class function TDJoinParser.ParseFileContent(FileContent: RawByteString;
