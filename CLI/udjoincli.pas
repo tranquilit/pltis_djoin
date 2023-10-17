@@ -233,7 +233,7 @@ begin
         LoadFromLDAP(Ldap, ConfigDV.S['MachineName'],
                            VarToStr(ConfigDV.GetValueOrDefault('MachineOU', '')),
                            VarToStr(ConfigDV.GetValueOrDefault('MachinePassword', '')),
-                           '', '',
+                           ConfigDV.S['DCName'], '',
                            Settings.Create.ActionIfExists);
         for GroupPolicy in ConfigDV.A['GroupPoliciesDisplayNames']^.Items do
           AddGroupPoliciesFromLdap(Ldap, VarToStr(GroupPolicy^));
@@ -371,7 +371,8 @@ begin
             '- AllowUnsafePasswordBind: Whether sending password for bind on a non Tls connection is allowed (default: false)'#10#9#9#9+
             '- OnlyKerberos: Whether kerberos bind is the only authorized bind (default: true)'#10#9#9#9+
             '- GroupPoliciesDisplayNames: List of GPO display names (default: empty)'#10#9#9#9+
-            '- GroupPoliciesGUIDs: List of GPO GUIDs (default: empty)';
+            '- GroupPoliciesGUIDs: List of GPO GUIDs (default: empty)'#10#9#9#9+
+            '- DCName: The domain controller DNS HostName (ex: bullseyex64.ad.company.it)';
         end;
 
         Param(['c', 'config'], ConfigParametersDoc);
