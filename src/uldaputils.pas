@@ -58,7 +58,7 @@ begin
       Result := ccrAlreadyExisting;
     aieOverwrite:
       begin
-        if not Ldap.Delete(HostEntry.ObjectName) then
+        if not Ldap.Delete(HostEntry.ObjectName, True) then
           Result := ccrDeleteFailed;
         HostEntry := nil;
       end;
