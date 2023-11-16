@@ -64,9 +64,13 @@ begin
       end;
     aieMove:
       // No need to move if already at the good place
-      if (LowerCase(HostEntry.ObjectName) <> LowerCase(Format('CN=%s,%s', [ComputerName, ComputerOU]))) and
-        not Ldap.ModifyDN(HostEntry.ObjectName, 'CN='+ComputerName, ComputerOU, True) then
-        Result := ccrMoveFailed;
+      if (LowerCase(HostEntry.ObjectName) <> LowerCase(Format('CN=%s,%s', [ComputerName, ComputerOU]))) then
+      begin
+        if Ldap.ModifyDN(HostEntry.ObjectName, 'CN='+ComputerName, ComputerOU, True) then
+          HostEntry.ObjectName := Format('CN=%s,%s', [ComputerName, ComputerOU])
+        else
+          Result := ccrMoveFailed;
+      end;
     end;
     if Result <> ccrSuccess then
       Exit;
