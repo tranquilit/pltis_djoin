@@ -180,7 +180,7 @@ begin
 
   // DC Object (take first DC if none supplied)
   if DomainController = '' then
-    DCObject := ldap.SearchFirst(ldap.DefaultDN, '(primaryGroupID=516)', [])
+    DCObject := GetDCforIp(ldap)
   else
     DCObject := ldap.SearchFirst(ldap.WellKnownObjects()^.DomainControllers, FormatUtf8('(dNSHostName=%)', [DomainController]), ['dNSHostName', 'serverReferenceBL']);
   if not Assigned(DCObject) then
