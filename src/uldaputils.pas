@@ -19,6 +19,13 @@ type
                      ccrPwdEditFailed);
   TActionIfExists = (aieFail, aieOverwrite, aieMove);
 
+  EComputerCreateException = class(Exception)
+  public
+    Status: TComputerCreateRes;
+    LdapError: String;
+    constructor Create(aMessage: String; aStatus: TComputerCreateRes; aLdapError: String = '');
+  end;
+
 function GetRandomPassword: RawUtf8;
 function PrepareComputerEntry(Ldap: TLdapClient; ComputerName, ComputerOU: RawUtf8;
   out ErrorMessage: RawUtf8; var Password: SpiUtf8; ActionIfExists: TActionIfExists = aieFail): TComputerCreateRes;
@@ -61,11 +68,17 @@ begin
   begin
     case ActionIfExists of
     aieFail:
-      Result := ccrAlreadyExisting;
+      begin
+        ErrorMessage := 'Computer already existing';
+        Result := ccrAlreadyExisting;
+      end;
     aieOverwrite:
       begin
         if not Ldap.Delete(HostEntry.ObjectName, True) then
+        begin
+          ErrorMessage := 'Failed to delete the existing computer: ' + RawLdapErrorString(Ldap.ResultCode);
           Result := ccrDeleteFailed;
+        end;
         HostEntry := nil;
       end;
     aieMove:
@@ -75,7 +88,10 @@ begin
         if Ldap.ModifyDN(HostEntry.ObjectName, 'CN='+ComputerName, ComputerOU, True) then
           HostEntry.ObjectName := Format('CN=%s,%s', [ComputerName, ComputerOU])
         else
+        begin
+          ErrorMessage := 'Failed to move the existing computer: ' + RawLdapErrorString(Ldap.ResultCode);
           Result := ccrMoveFailed;
+        end;
       end;
     end;
     if Result <> ccrSuccess then
@@ -87,11 +103,17 @@ begin
   if not Assigned(HostEntry) then
   begin
     if not Ldap.AddComputer(ComputerOU, ComputerName, ErrorMessage, Password, False) then
+    begin
+      ErrorMessage := 'Failed to create a new computer entry: ' + RawLdapErrorString(Ldap.ResultCode);
       Result := ccrCreateFailed;
+    end;
   end
   // If we didn't created the computer we still need to update the password
   else if not UpdateComputerPassword(Ldap, HostEntry, Password) then
+  begin
+    ErrorMessage := 'Failed to edit the computer password: ' + RawLdapErrorString(Ldap.ResultCode);
     Result := ccrPwdEditFailed;
+  end;
 end;
 
 function UpdateComputerPassword(Ldap: TLdapClient; Computer: TLdapResult;
@@ -229,6 +251,13 @@ begin
   SubnetMask := -1 shl (32 - StrToUInt(SubnetParts[1]));
   {$endif}
   Result := (Ip4ToCardinal(SubnetParts[0]) and SubnetMask) = (Ip4ToCardinal(Ip) and SubnetMask);
+end;
+
+constructor EComputerCreateException.Create(aMessage: String; aStatus: TComputerCreateRes; aLdapError: String);
+begin
+  Self.Status := aStatus;
+  Self.LdapError := aLdapError;
+  inherited Create(aMessage);
 end;
 
 end.

@@ -154,6 +154,7 @@ var
   Sid: TSid;
   Rid: Cardinal;
   DomGuid: TGuid;
+  aStatus: TComputerCreateRes;
 begin
   if DN = '' then
     DN := Ldap.WellKnownObjects^.Computers;
@@ -167,8 +168,9 @@ begin
   else
     Addr := FormatUtf8('\\%', [Address]);
 
-  if PrepareComputerEntry(ldap, ComputerName, DN, ErrMsg, Password, HostActionIfExists) <> ccrSuccess then
-    raise Exception.Create('Unable to prepare computer entry in the ldap server');
+  aStatus := PrepareComputerEntry(ldap, ComputerName, DN, ErrMsg, Password, HostActionIfExists);
+  if aStatus <> ccrSuccess then
+    raise EComputerCreateException.Create('Unable to prepare computer entry in the ldap server', aStatus, ErrMsg);
 
   // Computer Object
   ComputerObject := ldap.SearchFirst(ComputerDN, '', []);
