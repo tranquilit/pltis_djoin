@@ -57,12 +57,13 @@ function PrepareComputerEntry(Ldap: TLdapClient; ComputerName,
   ActionIfExists: TActionIfExists): TComputerCreateRes;
 var
   HostEntry: TLdapResult;
+  uacAttr: TLdapAttribute;
 begin
   Result := ccrSuccess;
   if Password = '' then
     Password := GetRandomPassword;
 
-  HostEntry := Ldap.SearchFirst(Ldap.DefaultDN, Format('(sAMAccountName=%s$)', [UpperCase(ComputerName)]), ['']);
+  HostEntry := Ldap.SearchFirst(Ldap.DefaultDN, Format('(sAMAccountName=%s$)', [UpperCase(ComputerName)]), ['userAccountControl']);
 
   if Assigned(HostEntry) then
   begin
@@ -82,6 +83,7 @@ begin
         HostEntry := nil;
       end;
     aieMove:
+      begin
       // No need to move if already at the good place
       if (LowerCase(HostEntry.ObjectName) <> LowerCase(Format('CN=%s,%s', [ComputerName, ComputerOU]))) then
       begin
@@ -92,6 +94,22 @@ begin
           ErrorMessage := 'Failed to move the existing computer: ' + RawLdapErrorString(Ldap.ResultCode);
           Result := ccrMoveFailed;
         end;
+      end;
+
+      if Result <> ccrMoveFailed then
+      begin
+        uacAttr := HostEntry.Attributes.Find('userAccountControl');
+        // Host disabled
+        if Assigned(uacAttr) and ((StrToInt(uacAttr.GetRaw) and $02) <> 0) then
+        begin
+          uacAttr.List[0] := IntToStr(StrToInt(uacAttr.GetRaw) and not $02);
+          if not Ldap.Modify(HostEntry.ObjectName, lmoReplace, uacAttr) then
+          begin
+            ErrorMessage := 'Failed to reenabled the existing computer after move: ' + RawLdapErrorString(Ldap.ResultCode);
+            Result := ccrMoveFailed;
+          end;
+        end;
+      end;
       end;
     end;
     if Result <> ccrSuccess then
