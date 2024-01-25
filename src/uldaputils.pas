@@ -30,6 +30,8 @@ function GetRandomPassword: RawUtf8;
 function PrepareComputerEntry(Ldap: TLdapClient; ComputerName, ComputerOU: RawUtf8;
   out ErrorMessage: RawUtf8; var Password: SpiUtf8; ActionIfExists: TActionIfExists = aieFail): TComputerCreateRes;
 function UpdateComputerPassword(Ldap: TLdapClient; Computer: TLdapResult; var Password: SpiUtf8): Boolean;
+function AddUserInGroups(Ldap: TLdapClient; ComputerDN: RawUtf8; Groups: TRawUtf8DynArray; out ErrorMessage: RawUtf8): Boolean;
+function AddUserInGroup(Ldap: TLdapClient; ComputerDN, GroupDN: RawUtf8): Boolean;
 
 function GetDCforIp(Ldap: TLdapClient; HostIp: RawUtf8 = ''): TLdapResult;
 function GetDCDnsforIp(Ldap: TLdapClient; HostIp: RawUtf8): RawUtf8;
@@ -158,6 +160,39 @@ begin
   finally
     PwdAttr.Free;
   end;
+end;
+
+function AddUserInGroups(Ldap: TLdapClient; ComputerDN: RawUtf8; Groups: TRawUtf8DynArray; out ErrorMessage: RawUtf8): Boolean;
+var
+  group: RawUtf8;
+begin
+  Result := True;
+  ErrorMessage := '';
+  for group in Groups do
+    if not AddUserInGroup(Ldap, ComputerDN, group) then
+    begin
+      Result := False;
+      ErrorMessage := ErrorMessage + Format('%s: %s'#13#10, [group, RawLdapErrorString(Ldap.ResultCode)]);
+    end;
+end;
+
+function AddUserInGroup(Ldap: TLdapClient; ComputerDN, GroupDN: RawUtf8): Boolean;
+var
+  MemberAttr: TLdapAttribute;
+  Operation: TLdapModifyOp;
+begin
+  Operation := lmoReplace;
+  MemberAttr := Ldap.SearchObject(GroupDN, '', 'member');
+
+  // No group member yet
+  if not Assigned(MemberAttr) then
+  begin
+    Operation := lmoAdd;
+    MemberAttr := TLdapAttribute.Create('member');
+  end;
+
+  MemberAttr.Add(ComputerDN);
+  Result := Ldap.Modify(GroupDN, Operation, MemberAttr) or (Ldap.ResultCode = LDAP_RES_ENTRY_ALREADY_EXISTS);
 end;
 
 function Ip4ToCardinal(text: RawUtf8): Cardinal;
