@@ -16,7 +16,9 @@ type
                      ccrDeleteFailed,
                      ccrMoveFailed,
                      ccrCreateFailed,
-                     ccrPwdEditFailed);
+                     ccrPwdEditFailed,
+                     ccrSpnAddFailed,
+                     ccrDnsAddFailed);
   TActionIfExists = (aieFail, aieOverwrite, aieMove);
 
   EComputerCreateException = class(Exception)
@@ -42,6 +44,7 @@ function Ip4ToCardinal(text: RawUtf8): Cardinal;
 implementation
 
 uses
+  mormot.core.text,
   mormot.core.unicode,
   mormot.net.sock;
 
@@ -60,6 +63,22 @@ function PrepareComputerEntry(Ldap: TLdapClient; ComputerName,
 var
   HostEntry: TLdapResult;
   uacAttr: TLdapAttribute;
+  dnsAttr: TLdapAttribute;
+  spnAttr: TLdapAttribute;
+  Cn: RawUtf8;
+
+  function ExistAttrInList(const Element: RawUtf8; const Attr: TLdapAttribute): Boolean;
+  var
+    i: Integer;
+  begin
+    Result := False;
+    for i := 0 to Attr.Count - 1 do
+      if Attr.List[i] = Element then
+      begin
+        Result := True;
+        Exit;
+      end;
+  end;
 begin
   Result := ccrSuccess;
   if Password = '' then
@@ -133,6 +152,86 @@ begin
   begin
     ErrorMessage := 'Failed to edit the computer password: ' + RawLdapErrorString(Ldap.ResultCode);
     Result := ccrPwdEditFailed;
+  end;
+
+
+  //
+  // servicePrincipalName and dNSHostName completion
+  //
+  HostEntry := Ldap.SearchFirst(Ldap.DefaultDN, Format('(sAMAccountName=%s$)', [UpperCase(ComputerName)]), ['userAccountControl', 'servicePrincipalName', 'dNSHostName']);
+
+  if Assigned(HostEntry) then
+  begin
+    Cn := DNToCN(Ldap.DefaultDN);
+
+    dnsAttr := HostEntry.Attributes.Find('dNSHostName');
+    if assigned(dnsAttr) then
+    begin
+      if not ExistAttrInList(FormatUtf8('%.%', [LowerCase(ComputerName), LowerCase(Cn)]), dnsAttr) then
+        dnsAttr.Add(FormatUtf8('%.%', [LowerCase(ComputerName), LowerCase(Cn)]));
+
+      if not Ldap.Modify(HostEntry.ObjectName, lmoReplace, dnsAttr) then
+      begin
+        ErrorMessage := 'Failed to edit the computer dNSHostName: ' + RawLdapErrorString(Ldap.ResultCode);
+        Result := ccrDnsAddFailed;
+        Exit;
+      end;
+    end
+    else
+    begin
+      dnsAttr := TLdapAttribute.Create('dNSHostName');
+      try
+        dnsAttr.Add(FormatUtf8('%.%', [LowerCase(ComputerName), LowerCase(Cn)]));
+
+        if not Ldap.Modify(HostEntry.ObjectName, lmoAdd, dnsAttr) then
+        begin
+          ErrorMessage := 'Failed to edit the computer dNSHostName: ' + RawLdapErrorString(Ldap.ResultCode);
+          Result := ccrDnsAddFailed;
+          Exit;
+        end;
+      finally
+        dnsAttr.Free;
+      end;
+    end;
+
+    spnAttr := HostEntry.Attributes.Find('servicePrincipalName');
+    if assigned(spnAttr) then
+    begin
+      if not ExistAttrInList(FormatUtf8('HOST/%', [UpperCase(ComputerName)]), spnAttr) then
+        spnAttr.Add(FormatUtf8('HOST/%', [UpperCase(ComputerName)]));
+      if not ExistAttrInList(FormatUtf8('HOST/%.%', [LowerCase(ComputerName), LowerCase(Cn)]), spnAttr) then
+        spnAttr.Add(FormatUtf8('HOST/%.%', [LowerCase(ComputerName), LowerCase(Cn)]));
+      if not ExistAttrInList(FormatUtf8('RestrictedKrbHost/%', [UpperCase(ComputerName)]), spnAttr) then
+        spnAttr.Add(FormatUtf8('RestrictedKrbHost/%', [UpperCase(ComputerName)]));
+      if not ExistAttrInList(FormatUtf8('RestrictedKrbHost/%.%', [LowerCase(ComputerName), LowerCase(Cn)]), spnAttr) then
+        spnAttr.Add(FormatUtf8('RestrictedKrbHost/%.%', [LowerCase(ComputerName), LowerCase(Cn)]));
+
+      if not Ldap.Modify(HostEntry.ObjectName, lmoReplace, spnAttr) then
+      begin
+        ErrorMessage := 'Failed to edit the computer servicePrincipalName: ' + RawLdapErrorString(Ldap.ResultCode);
+        Result := ccrSpnAddFailed;
+        Exit;
+      end;
+    end
+    else
+    begin
+      spnAttr := TLdapAttribute.Create('servicePrincipalName');
+      try
+        spnAttr.Add(FormatUtf8('HOST/%', [UpperCase(ComputerName)]));
+        spnAttr.Add(FormatUtf8('HOST/%.%', [LowerCase(ComputerName), LowerCase(Cn)]));
+        spnAttr.Add(FormatUtf8('RestrictedKrbHost/%', [UpperCase(ComputerName)]));
+        spnAttr.Add(FormatUtf8('RestrictedKrbHost/%.%', [LowerCase(ComputerName), LowerCase(Cn)]));
+
+        if not Ldap.Modify(HostEntry.ObjectName, lmoAdd, spnAttr) then
+        begin
+          ErrorMessage := 'Failed to edit the computer servicePrincipalName: ' + RawLdapErrorString(Ldap.ResultCode);
+          Result := ccrSpnAddFailed;
+          Exit;
+        end;
+      finally
+        spnAttr.Free;
+      end;
+    end;
   end;
 end;
 
