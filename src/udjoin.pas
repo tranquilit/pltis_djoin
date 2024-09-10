@@ -173,9 +173,9 @@ begin
     raise EComputerCreateException.Create('Unable to prepare computer entry in the ldap server', aStatus, ErrMsg);
 
   // Computer Object
-  ComputerObject := ldap.SearchFirst(ComputerDN, '', []);
+  ComputerObject := ldap.SearchFirst(DN, FormatUtf8('(sAMAccountName=%$)', [ComputerName]), []);
   if not (Assigned(ComputerObject) and ComputerObject.CopyObjectSid(SidStr) and TextToSid(PUtf8Char(@SidStr[1]), Sid)) then
-    raise Exception.Create('Unable to retreive computer SID');
+    raise Exception.Create('Unable to retrieve computer SID');
     // Create computer if not existing
   Rid := sid.SubAuthority[sid.SubAuthorityCount - 1];
   Dec(sid.SubAuthorityCount);
