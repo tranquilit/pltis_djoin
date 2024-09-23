@@ -66,6 +66,7 @@ var
   dnsAttr: TLdapAttribute;
   spnAttr: TLdapAttribute;
   Cn: RawUtf8;
+  Enum: TLdapError;
 
   function ExistAttrInList(const Element: RawUtf8; const Attr: TLdapAttribute): Boolean;
   var
@@ -98,7 +99,7 @@ begin
       begin
         if not Ldap.Delete(HostEntry.ObjectName, True) then
         begin
-          ErrorMessage := 'Failed to delete the existing computer: ' + RawLdapErrorString(Ldap.ResultCode);
+          ErrorMessage := 'Failed to delete the existing computer: ' + RawLdapErrorString(Ldap.ResultCode, Enum);
           Result := ccrDeleteFailed;
         end;
         HostEntry := nil;
@@ -112,7 +113,7 @@ begin
           HostEntry.ObjectName := Format('CN=%s,%s', [ComputerName, ComputerOU])
         else
         begin
-          ErrorMessage := 'Failed to move the existing computer: ' + RawLdapErrorString(Ldap.ResultCode);
+          ErrorMessage := 'Failed to move the existing computer: ' + RawLdapErrorString(Ldap.ResultCode, Enum);
           Result := ccrMoveFailed;
         end;
       end;
@@ -126,7 +127,7 @@ begin
           uacAttr.List[0] := IntToStr(StrToInt(uacAttr.GetRaw) and not $02);
           if not Ldap.Modify(HostEntry.ObjectName, lmoReplace, uacAttr) then
           begin
-            ErrorMessage := 'Failed to reenabled the existing computer after move: ' + RawLdapErrorString(Ldap.ResultCode);
+            ErrorMessage := 'Failed to reenabled the existing computer after move: ' + RawLdapErrorString(Ldap.ResultCode, Enum);
             Result := ccrMoveFailed;
           end;
         end;
@@ -143,14 +144,14 @@ begin
   begin
     if not Ldap.AddComputer(ComputerOU, ComputerName, ErrorMessage, Password, False) then
     begin
-      ErrorMessage := 'Failed to create a new computer entry: ' + RawLdapErrorString(Ldap.ResultCode);
+      ErrorMessage := 'Failed to create a new computer entry: ' + RawLdapErrorString(Ldap.ResultCode, Enum);
       Result := ccrCreateFailed;
     end;
   end
   // If we didn't created the computer we still need to update the password
   else if not UpdateComputerPassword(Ldap, HostEntry, Password) then
   begin
-    ErrorMessage := 'Failed to edit the computer password: ' + RawLdapErrorString(Ldap.ResultCode);
+    ErrorMessage := 'Failed to edit the computer password: ' + RawLdapErrorString(Ldap.ResultCode, Enum);
     Result := ccrPwdEditFailed;
   end;
 
@@ -172,20 +173,20 @@ begin
 
       if not Ldap.Modify(HostEntry.ObjectName, lmoReplace, dnsAttr) then
       begin
-        ErrorMessage := 'Failed to edit the computer dNSHostName: ' + RawLdapErrorString(Ldap.ResultCode);
+        ErrorMessage := 'Failed to edit the computer dNSHostName: ' + RawLdapErrorString(Ldap.ResultCode, Enum);
         Result := ccrDnsAddFailed;
         Exit;
       end;
     end
     else
     begin
-      dnsAttr := TLdapAttribute.Create('dNSHostName');
+      dnsAttr := TLdapAttribute.Create('dNSHostName', atDnsHostName);
       try
         dnsAttr.Add(FormatUtf8('%.%', [LowerCase(ComputerName), LowerCase(Cn)]));
 
         if not Ldap.Modify(HostEntry.ObjectName, lmoAdd, dnsAttr) then
         begin
-          ErrorMessage := 'Failed to edit the computer dNSHostName: ' + RawLdapErrorString(Ldap.ResultCode);
+          ErrorMessage := 'Failed to edit the computer dNSHostName: ' + RawLdapErrorString(Ldap.ResultCode, Enum);
           Result := ccrDnsAddFailed;
           Exit;
         end;
@@ -208,14 +209,14 @@ begin
 
       if not Ldap.Modify(HostEntry.ObjectName, lmoReplace, spnAttr) then
       begin
-        ErrorMessage := 'Failed to edit the computer servicePrincipalName: ' + RawLdapErrorString(Ldap.ResultCode);
+        ErrorMessage := 'Failed to edit the computer servicePrincipalName: ' + RawLdapErrorString(Ldap.ResultCode, Enum);
         Result := ccrSpnAddFailed;
         Exit;
       end;
     end
     else
     begin
-      spnAttr := TLdapAttribute.Create('servicePrincipalName');
+      spnAttr := TLdapAttribute.Create('servicePrincipalName', atServicePrincipalName);
       try
         spnAttr.Add(FormatUtf8('HOST/%', [UpperCase(ComputerName)]));
         spnAttr.Add(FormatUtf8('HOST/%.%', [LowerCase(ComputerName), LowerCase(Cn)]));
@@ -224,7 +225,7 @@ begin
 
         if not Ldap.Modify(HostEntry.ObjectName, lmoAdd, spnAttr) then
         begin
-          ErrorMessage := 'Failed to edit the computer servicePrincipalName: ' + RawLdapErrorString(Ldap.ResultCode);
+          ErrorMessage := 'Failed to edit the computer servicePrincipalName: ' + RawLdapErrorString(Ldap.ResultCode, enum);
           Result := ccrSpnAddFailed;
           Exit;
         end;
@@ -249,7 +250,7 @@ begin
   if Password = '' then
     Password := GetRandomPassword;
 
-  PwdAttr := TLdapAttribute.Create('unicodePwd');
+  PwdAttr := TLdapAttribute.Create('unicodePwd', atUnicodePwd);
   try
     QuotedPassword := '"' + Password + '"';
     PwdU16 := Utf8DecodeToUnicodeRawByteString(QuotedPassword);
@@ -264,6 +265,7 @@ end;
 function AddUserInGroups(Ldap: TLdapClient; ComputerDN: RawUtf8; Groups: TRawUtf8DynArray; out ErrorMessage: RawUtf8): Boolean;
 var
   group: RawUtf8;
+  enum: TLdapError;
 begin
   Result := True;
   ErrorMessage := '';
@@ -271,7 +273,7 @@ begin
     if not AddUserInGroup(Ldap, ComputerDN, group) then
     begin
       Result := False;
-      ErrorMessage := ErrorMessage + Format('%s: %s'#13#10, [group, RawLdapErrorString(Ldap.ResultCode)]);
+      ErrorMessage := ErrorMessage + Format('%s: %s'#13#10, [group, RawLdapErrorString(Ldap.ResultCode, enum)]);
     end;
 end;
 
@@ -287,7 +289,7 @@ begin
   if not Assigned(MemberAttr) then
   begin
     Operation := lmoAdd;
-    MemberAttr := TLdapAttribute.Create('member');
+    MemberAttr := TLdapAttribute.Create('member', atMember);
   end;
 
   MemberAttr.Add(ComputerDN);
@@ -330,7 +332,7 @@ begin
     DcBlObject := Ldap.SearchFirst('CN=Servers,' + SiteDN.GetReadable, '', ['serverReference']);
     if not Assigned(DcBlObject) then
       Exit;
-    Result := ldap.SearchObject(DcBlObject.Attributes.Get('serverReference'), '', []);
+    Result := ldap.SearchObject(DcBlObject.Attributes.GetByName( 'serverReference'), '',[]);
   finally
     ldap.SearchScope := previousScope;
   end;
@@ -338,7 +340,7 @@ end;
 
 function GetDCDnsforIp(Ldap: TLdapClient; HostIp: RawUtf8): RawUtf8;
 begin
-  Result := GetDCforIp(ldap, HostIp).Attributes.Get('dNSHostName');
+  Result := GetDCforIp(ldap, HostIp).Attributes.Get(atDnsHostName);
 end;
 
 function GetSubnetForIp(Ldap: TLdapClient; HostIp: RawUtf8): RawUtf8;

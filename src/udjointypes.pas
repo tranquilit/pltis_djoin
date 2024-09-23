@@ -12,6 +12,7 @@ uses
   SysUtils,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   uNDRContext;
 
 const

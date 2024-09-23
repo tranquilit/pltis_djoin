@@ -11,6 +11,7 @@ uses
   Classes,
   SysUtils,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.base,
   mormot.net.ldap,
   uDJoinTypes,
@@ -152,12 +153,13 @@ var
     DomainCN, ForestCN, ErrMsg: RawUtf8;
   ComputerObject, DCObject, DNObject: TLdapResult;
   Sid: TSid;
+  PSidStr: PUtf8Char;
   Rid: Cardinal;
   DomGuid: TGuid;
   aStatus: TComputerCreateRes;
 begin
   if DN = '' then
-    DN := Ldap.WellKnownObjects^.Computers;
+    DN := Ldap.WellKnownObjects^[lkoComputers];
   ComputerDN := FormatUtf8('CN=%,%', [ComputerName, DN]);
 
   DomainCN := DNToCN(ldap.DefaultDN);
@@ -174,9 +176,13 @@ begin
 
   // Computer Object
   ComputerObject := ldap.SearchFirst(DN, FormatUtf8('(sAMAccountName=%$)', [ComputerName]), []);
-  if not (Assigned(ComputerObject) and ComputerObject.CopyObjectSid(SidStr) and TextToSid(PUtf8Char(@SidStr[1]), Sid)) then
+  if not (Assigned(ComputerObject) and ComputerObject.CopyObjectSid(SidStr)) then
     raise Exception.Create('Unable to retrieve computer SID');
-    // Create computer if not existing
+  PSidStr := @SidStr[1];
+  if not TextToSid(PSidStr, Sid) then
+    raise Exception.Create('Unable to retrieve computer SID');
+
+  // Create computer if not existing
   Rid := sid.SubAuthority[sid.SubAuthorityCount - 1];
   Dec(sid.SubAuthorityCount);
 
@@ -184,7 +190,7 @@ begin
   if DomainController = '' then
     DCObject := GetDCforIp(ldap)
   else
-    DCObject := ldap.SearchFirst(ldap.WellKnownObjects()^.DomainControllers, FormatUtf8('(dNSHostName=%)', [DomainController]), ['dNSHostName', 'serverReferenceBL']);
+    DCObject := ldap.SearchFirst(ldap.WellKnownObjects()^[lkoDomainControllers], FormatUtf8('(dNSHostName=%)', [DomainController]), ['dNSHostName', 'serverReferenceBL']);
   if not Assigned(DCObject) then
      raise Exception.Create('Unable to retreive Domain Controller object');
   DC := FormatUtf8('\\%', [DCObject.Attributes.Find('dNSHostName').GetReadable]);

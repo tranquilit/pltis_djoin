@@ -11,6 +11,7 @@ uses
   Classes,
   SysUtils,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.base;
 
 const
@@ -146,7 +147,7 @@ uses
   mormot.core.unicode;
 
 const
-  EXPECTED_COMMON_HEADER : UInt64 = $cccccccc00081001;
+  EXPECTED_COMMON_HEADER : Int64 = $cccccccc00081001;
   COMMON_HEADER_FILLER : UInt32 = $CCCCCCCC;
   PRIVATE_HEADER_FILLER: UInt32 = 0;
 
