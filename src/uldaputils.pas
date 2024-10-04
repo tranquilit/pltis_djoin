@@ -168,8 +168,8 @@ begin
     dnsAttr := HostEntry.Attributes.Find('dNSHostName');
     if assigned(dnsAttr) then
     begin
-      if not ExistAttrInList(FormatUtf8('%.%', [LowerCase(ComputerName), LowerCase(Cn)]), dnsAttr) then
-        dnsAttr.Add(FormatUtf8('%.%', [LowerCase(ComputerName), LowerCase(Cn)]));
+      dnsAttr.Clear;
+      dnsAttr.Add(FormatUtf8('%.%', [LowerCase(ComputerName), LowerCase(Cn)]));
 
       if not Ldap.Modify(HostEntry.ObjectName, lmoReplace, dnsAttr) then
       begin
