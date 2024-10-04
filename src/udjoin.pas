@@ -172,7 +172,10 @@ begin
 
   aStatus := PrepareComputerEntry(ldap, ComputerName, DN, ErrMsg, Password, HostActionIfExists);
   if aStatus <> ccrSuccess then
-    raise EComputerCreateException.Create('Unable to prepare computer entry in the ldap server', aStatus, ErrMsg);
+    raise Exception.Create(FormatUtf8('Unable to prepare computer entry in the ldap server'
+                                      + #13#10 + 'Status code: %'
+                                      + #13#10 + 'ErrMsg:'
+                                      + #13#10 + '%', [aStatus, ErrMsg]));
 
   // Computer Object
   ComputerObject := ldap.SearchFirst(DN, FormatUtf8('(sAMAccountName=%$)', [ComputerName]), []);
