@@ -8,6 +8,7 @@ uses
   Classes,
   SysUtils,
   mormot.core.base,
+  mormot.crypt.core,
   mormot.net.ldap;
 
 type
@@ -49,12 +50,8 @@ uses
   mormot.net.sock;
 
 function GetRandomPassword: RawUtf8;
-var
-  i: Integer;
 begin
-  SetLength(Result, 120);
-  for i := 1 to 120 do
-    Result[i] := Char(Random(Byte('~') - Byte('!')) + Byte('!'));
+  TAesPrng.Main.RandomPassword(120));
 end;
 
 function PrepareComputerEntry(Ldap: TLdapClient; ComputerName,
