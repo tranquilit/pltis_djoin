@@ -65,7 +65,7 @@ type
     function LoadFromFileContent(const FileContent: RawByteString; Unicode: Boolean = True): Boolean;
     function LoadFromBinary(const content: RawByteString): Boolean;
     function LoadFromLDAP(ldap: TLdapClient; ComputerName, DN: RawUtf8; Password: SpiUtf8; DomainController: RawUtf8 = ''; Address: RawUtf8 = '';
-      HostActionIfExists: TActionIfExists = aieFail): Boolean;
+      HostActionIfExists: TActionIfExists = aieFail; RemoveSPN: Boolean = False): Boolean;
 
     // Group policies
     function AddGroupPolicyFromGPT(Name: RawUtf8; GPT: RawUtf8): Integer;
@@ -147,7 +147,7 @@ end;
 
 function TDJoin.LoadFromLDAP(ldap: TLdapClient; ComputerName,
   DN: RawUtf8; Password: SpiUtf8; DomainController: RawUtf8; Address: RawUtf8;
-  HostActionIfExists: TActionIfExists): Boolean;
+  HostActionIfExists: TActionIfExists; RemoveSPN: Boolean): Boolean;
 var
   ComputerDN, Addr, DC, Netbios, DCReference, SiteName, SidStr,
     DomainCN, ForestCN, ErrMsg: RawUtf8;
@@ -170,7 +170,7 @@ begin
   else
     Addr := FormatUtf8('\\%', [Address]);
 
-  aStatus := PrepareComputerEntry(ldap, ComputerName, DN, ErrMsg, Password, HostActionIfExists);
+  aStatus := PrepareComputerEntry(ldap, ComputerName, DN, ErrMsg, Password, HostActionIfExists, RemoveSPN);
   if aStatus <> ccrSuccess then
     raise Exception.Create(FormatUtf8('Unable to prepare computer entry in the ldap server'
                                       + #13#10 + 'Status code: %'

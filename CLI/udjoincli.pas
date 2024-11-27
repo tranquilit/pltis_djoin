@@ -21,6 +21,7 @@ type
     Force: Boolean;
     UseLdap: Boolean;
     ActionIfExists: TActionIfExists;
+    RemoveSPN: Boolean;
   end;
 
   TDumpSettings = record
@@ -234,7 +235,8 @@ begin
                            VarToStr(ConfigDV.GetValueOrDefault('MachineOU', '')),
                            VarToStr(ConfigDV.GetValueOrDefault('MachinePassword', '')),
                            ConfigDV.S['DCName'], '',
-                           Settings.Create.ActionIfExists);
+                           Settings.Create.ActionIfExists,
+                           Settings.Create.RemoveSPN);
         for GroupPolicy in ConfigDV.A['GroupPoliciesDisplayNames']^.Items do
           AddGroupPoliciesFromLdap(Ldap, VarToStr(GroupPolicy^));
         for GroupPolicy in ConfigDV.A['GroupPoliciesGUIDs']^.Items do
@@ -301,6 +303,7 @@ constructor TDJoinCLI.Create;
 begin
   inherited Create;
   fErrorCode := 0;
+  Settings.Create.RemoveSPN := False;
   Settings.Create.ActionIfExists := aieFail;
 end;
 
@@ -428,6 +431,7 @@ begin
         CLI.Settings.Create.UseLdap := Option('ldap');
         if CLI.Settings.Create.UseLdap then
         begin
+          CLI.Settings.Create.RemoveSPN := Option('remove-spn');
           case Param('reuse', '', 'fail') of
             'fail': CLI.Settings.Create.ActionIfExists := aieFail;
             'overwrite': CLI.Settings.Create.ActionIfExists := aieOverwrite;
