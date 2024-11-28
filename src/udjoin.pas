@@ -159,7 +159,7 @@ var
   aStatus: TComputerCreateRes;
 begin
   if DN = '' then
-    DN := Ldap.WellKnownObjects^[lkoComputers];
+    DN := Ldap.WellKnownObject(lkoComputers);
   ComputerDN := FormatUtf8('CN=%,%', [ComputerName, DN]);
 
   DomainCN := DNToCN(ldap.DefaultDN);
@@ -193,7 +193,7 @@ begin
   if DomainController = '' then
     DCObject := GetDCforIp(ldap)
   else
-    DCObject := ldap.SearchFirst(ldap.WellKnownObjects()^[lkoDomainControllers], FormatUtf8('(dNSHostName=%)', [DomainController]), ['dNSHostName', 'serverReferenceBL']);
+    DCObject := ldap.SearchFirst(ldap.WellKnownObject(lkoDomainControllers), FormatUtf8('(dNSHostName=%)', [DomainController]), ['dNSHostName', 'serverReferenceBL']);
   if not Assigned(DCObject) then
      raise Exception.Create('Unable to retreive Domain Controller object');
   DC := FormatUtf8('\\%', [DCObject.Attributes.Find('dNSHostName').GetReadable]);
