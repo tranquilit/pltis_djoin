@@ -52,7 +52,7 @@ uses
 
 function GetRandomPassword: RawUtf8;
 begin
-  TAesPrng.Main.RandomPassword(120);
+  Result := TAesPrng.Main.RandomPassword(120);
 end;
 
 function PrepareComputerEntry(Ldap: TLdapClient; ComputerName,
