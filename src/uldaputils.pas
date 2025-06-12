@@ -261,9 +261,7 @@ begin
 
   PwdAttr := TLdapAttribute.Create('unicodePwd', atUnicodePwd);
   try
-    QuotedPassword := '"' + Password + '"';
-    PwdU16 := Utf8DecodeToUnicodeRawByteString(QuotedPassword);
-    PwdAttr.Add(PwdU16);
+    PwdAttr.Add(LdapUnicodePwd(Password));
     if Ldap.Modify(Computer.ObjectName, lmoReplace, PwdAttr) then
       Result := True;
   finally

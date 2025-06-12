@@ -691,7 +691,7 @@ end;
 class function TDJoinParser.ParseFile(FileName: TFileName; var DJoin: TDJoin;
   Unicode: Boolean): Boolean;
 begin
-  Result := ParseFileContent(StringFromFile(Filename, True), DJoin, Unicode);
+  Result := ParseFileContent(StringFromFile(Filename), DJoin, Unicode);
 end;
 
 class function TDJoinParser.ParseFileContent(FileContent: RawByteString;
