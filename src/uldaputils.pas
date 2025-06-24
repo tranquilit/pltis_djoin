@@ -248,8 +248,6 @@ end;
 function UpdateComputerPassword(Ldap: TLdapClient; Computer: TLdapResult;
   var Password: SpiUtf8): Boolean;
 var
-  QuotedPassword: SpiUtf8;
-  PwdU16: RawByteString;
   PwdAttr: TLdapAttribute;
 begin
   Result := False;
@@ -261,9 +259,7 @@ begin
 
   PwdAttr := TLdapAttribute.Create('unicodePwd', atUnicodePwd);
   try
-    QuotedPassword := '"' + Password + '"';
-    PwdU16 := Utf8DecodeToUnicodeRawByteString(QuotedPassword);
-    PwdAttr.Add(PwdU16);
+    PwdAttr.Add(LdapUnicodePwd(Password));
     if Ldap.Modify(Computer.ObjectName, lmoReplace, PwdAttr) then
       Result := True;
   finally
