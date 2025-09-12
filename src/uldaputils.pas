@@ -72,7 +72,7 @@ var
   begin
     Result := False;
     for i := 0 to Attr.Count - 1 do
-      if Attr.List[i] = Element then
+      if LowerCase(Attr.List[i]) = LowerCase(Element) then
       begin
         Result := True;
         Exit;
