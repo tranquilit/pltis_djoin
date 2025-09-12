@@ -63,8 +63,9 @@ var
   uacAttr: TLdapAttribute;
   dnsAttr: TLdapAttribute;
   spnAttr: TLdapAttribute;
-  Cn: RawUtf8;
+  Cn, cSam, cDn, cSafe: RawUtf8;
   Enum: TLdapError;
+  attrs: TLdapAttributeList;
 
   function ExistAttrInList(const Element: RawUtf8; const Attr: TLdapAttribute): Boolean;
   var
@@ -83,7 +84,7 @@ begin
   if Password = '' then
     Password := GetRandomPassword;
 
-  HostEntry := Ldap.SearchFirst(Ldap.DefaultDN, Format('(sAMAccountName=%s$)', [UpperCase(ComputerName)]), ['userAccountControl']);
+  HostEntry := Ldap.SearchFirst(Ldap.DefaultDN, Format('(sAMAccountName=%s$)', [LdapEscape(UpperCase(ComputerName))]), ['userAccountControl']);
 
   if Assigned(HostEntry) then
   begin
@@ -140,10 +141,23 @@ begin
   // Not a else statement because it can be modified if aieOverwrite
   if not Assigned(HostEntry) then
   begin
-    if not Ldap.AddComputer(ComputerOU, ComputerName, ErrorMessage, Password, False) then
-    begin
-      ErrorMessage := 'Failed to create a new computer entry: ' + RawLdapErrorString(Ldap.ResultCode, Enum);
-      Result := ccrCreateFailed;
+    cSafe := LdapEscape(ComputerName);
+    cDn := Join(['CN=', cSafe, ',', ComputerOU]);
+    cSam := Join([UpperCase(cSafe), '$']);
+    attrs := TLdapAttributeList.Create(
+      [atObjectClass, atCommonName, atName, atSAMAccountName],
+      ['computer',    cSafe,        cSafe,  cSam]);
+    try
+      attrs.UserAccountControl := [uacWorkstationTrusted];
+      if Password <> '' then
+        attrs.AddUnicodePwd(Password);
+      if not Ldap.Add(cDn, attrs) then
+      begin
+        ErrorMessage := 'Failed to create a new computer entry: ' + RawLdapErrorString(Ldap.ResultCode, Enum);
+        Result := ccrCreateFailed;
+      end;
+    finally
+      FreeAndNil(attrs);
     end;
   end
   // If we didn't created the computer we still need to update the password
@@ -157,7 +171,7 @@ begin
   //
   // servicePrincipalName and dNSHostName completion
   //
-  HostEntry := Ldap.SearchFirst(Ldap.DefaultDN, Format('(sAMAccountName=%s$)', [UpperCase(ComputerName)]), ['userAccountControl', 'servicePrincipalName', 'dNSHostName']);
+  HostEntry := Ldap.SearchFirst(Ldap.DefaultDN, Format('(sAMAccountName=%s$)', [LdapEscape(UpperCase(ComputerName))]), ['userAccountControl', 'servicePrincipalName', 'dNSHostName']);
 
   if Assigned(HostEntry) then
   begin
