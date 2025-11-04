@@ -79,7 +79,7 @@ type
 
     function Dump(DumpGpoRegistryValues: Boolean = False): RawUtf8;
     procedure DumpToConsole;
-    function DumpLight: RawUtf8;
+    function DumpLight(DumpGpoRegistryValues: Boolean = False): RawUtf8;
 
     // Machine Informations
     property MachineDomainName: RawUtf8 read fMachineDomainName write fMachineDomainName;
@@ -665,7 +665,7 @@ begin
   WriteLn(Dump(True));
 end;
 
-function TDJoin.DumpLight: RawUtf8;
+function TDJoin.DumpLight(DumpGpoRegistryValues: Boolean): RawUtf8;
 var
   DomainGuidStr: RawUtf8;
   temp: TRawSmbiosInfo;
