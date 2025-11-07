@@ -302,7 +302,13 @@ var
   Operation: TLdapModifyOp;
 begin
   Operation := lmoReplace;
-  MemberAttr := Ldap.SearchObject(GroupDN, '', 'member');
+  MemberAttr := nil;
+  Ldap.SearchRangeBegin;
+  try
+    MemberAttr := Ldap.SearchObject(GroupDN, '', 'member');
+  finally
+    Ldap.SearchRangeEnd;
+  end;
 
   // No group member yet
   if not Assigned(MemberAttr) then
@@ -342,7 +348,13 @@ begin
     Exit;
   end;
 
-  SiteDN := Ldap.SearchObject('CN='+subnet+',CN=Subnets,CN=Sites,CN=Configuration,' + ldap.DefaultDN, '', 'siteObject');
+  SiteDN := nil;
+  Ldap.SearchRangeBegin;
+  try
+    SiteDN := Ldap.SearchObject('CN='+subnet+',CN=Subnets,CN=Sites,CN=Configuration,' + ldap.DefaultDN, '', 'siteObject');
+  finally
+    Ldap.SearchRangeEnd;
+  end;
   if not Assigned(SiteDN) then
     Exit;
   previousScope := Ldap.SearchScope;
@@ -351,7 +363,12 @@ begin
     DcBlObject := Ldap.SearchFirst('CN=Servers,' + SiteDN.GetReadable, '', ['serverReference']);
     if not Assigned(DcBlObject) then
       Exit;
-    Result := ldap.SearchObject(DcBlObject.Attributes.GetByName( 'serverReference'), '',[]);
+    ldap.SearchRangeBegin;
+    try
+      Result := ldap.SearchObject(DcBlObject.Attributes.GetByName( 'serverReference'), '',[]);
+    finally
+      ldap.SearchRangeEnd;
+    end;
   finally
     ldap.SearchScope := previousScope;
   end;
