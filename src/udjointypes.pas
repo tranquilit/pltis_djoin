@@ -1277,7 +1277,7 @@ begin
     Ctx.PackPtr(Pointer(lpMachineName));
     Ctx.PackPtr(Pointer(lpMachinePassword));
     /// Padding
-    Ctx.PackUInt32(-1);
+    Ctx.PackUInt32($ffffffff);
     DnsDomainInfo.NDRPack(Ctx, NDR_Scalar);
     DcInfo.NDRPack(Ctx, NDR_Scalar);
     Ctx.PackUInt32(Options);
