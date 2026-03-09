@@ -63,7 +63,7 @@ var
   uacAttr: TLdapAttribute;
   dnsAttr: TLdapAttribute;
   spnAttr: TLdapAttribute;
-  Cn, cSam, cDn, cSafe: RawUtf8;
+  Cn, cSam, cDn, cSafe, NewDNS: RawUtf8;
   Enum: TLdapError;
   attrs: TLdapAttributeList;
 
@@ -165,6 +165,7 @@ begin
   begin
     ErrorMessage := 'Failed to edit the computer password: ' + RawLdapErrorString(Ldap.ResultCode, Enum);
     Result := ccrPwdEditFailed;
+    Exit;
   end;
 
 
@@ -176,12 +177,13 @@ begin
   if Assigned(HostEntry) then
   begin
     Cn := DNToCN(Ldap.DefaultDN);
+    NewDNS := FormatUtf8('%.%', [LowerCase(ComputerName), LowerCase(Cn)]);
 
     dnsAttr := HostEntry.Attributes.Find('dNSHostName');
-    if assigned(dnsAttr) then
+    if assigned(dnsAttr) and (dnsAttr.GetReadable() <> NewDNS) then
     begin
       dnsAttr.Clear;
-      dnsAttr.Add(FormatUtf8('%.%', [LowerCase(ComputerName), LowerCase(Cn)]));
+      dnsAttr.Add(NewDNS);
 
       if not Ldap.Modify(HostEntry.ObjectName, lmoReplace, dnsAttr) then
       begin
@@ -190,11 +192,11 @@ begin
         Exit;
       end;
     end
-    else
+    else if not Assigned(dnsAttr) then
     begin
       dnsAttr := TLdapAttribute.Create('dNSHostName', atDnsHostName);
       try
-        dnsAttr.Add(FormatUtf8('%.%', [LowerCase(ComputerName), LowerCase(Cn)]));
+        dnsAttr.Add(NewDNS);
 
         if not Ldap.Modify(HostEntry.ObjectName, lmoAdd, dnsAttr) then
         begin
