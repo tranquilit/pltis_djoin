@@ -9,6 +9,7 @@ uses
   SysUtils,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   uDJoin,
   uLdapUtils;
 
@@ -170,6 +171,7 @@ var
   LdapSettings: TLdapClientSettings;
   Ldap: TLdapClient;
   GroupPolicy: PVariant;
+  v: PChar;
 begin
   if FileExists(Settings.Create.Config) then
     ConfigStr := StringFromFile(Settings.Create.Config)
@@ -267,7 +269,8 @@ begin
           raise Exception.Create('Domain GUID format is invalid');
 
         StrSid := ConfigDV.S['DomainSID'];
-        if TextToSid(@StrSid[1], dsid) then
+        v := @StrSid[1];
+        if TextToSid(v, dsid) then
           DomainSID := dsid
         else
           raise Exception.Create('Domain SID format is invalid');
