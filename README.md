@@ -2,7 +2,7 @@
 
 *A DJoin blob (de)serialization library in modern Object Pascal*
 
-(c) 2023-2023 Tranquil IT https://www.tranquil.it
+(c) 2023-2026 Tranquil IT https://www.tranquil.it
 
 
 ## Presentation
