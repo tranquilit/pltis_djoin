@@ -79,6 +79,7 @@ type
 
     function Dump(DumpGpoRegistryValues: Boolean = False): RawUtf8;
     procedure DumpToConsole;
+    function DumpLight(DumpGpoRegistryValues: Boolean = False): RawUtf8;
 
     // Machine Informations
     property MachineDomainName: RawUtf8 read fMachineDomainName write fMachineDomainName;
@@ -662,6 +663,66 @@ end;
 procedure TDJoin.DumpToConsole;
 begin
   WriteLn(Dump(True));
+end;
+
+function TDJoin.DumpLight(DumpGpoRegistryValues: Boolean): RawUtf8;
+var
+  DomainGuidStr: RawUtf8;
+  temp: TRawSmbiosInfo;
+  GroupPolicy: TGroupPolicy;
+  RegistryValue: TRegistryValue;
+begin
+  Result := '';
+  DecodeSmbiosUuid(@DomainGUID, DomainGuidStr, temp);
+
+  Append(Result, 'Machine Information:'#13#10);
+  Append(Result, [' - Domain: ', Trim(RawUtf8(MachineDomainName)), #13#10]);
+  Append(Result, [' - Name: ', Trim(RawUtf8(MachineName)), #13#10]);
+  Append(Result, [' - Rid: ', MachineRid, #13#10]);
+  Append(Result, [' - Site Name: ', Trim(RawUtf8(DCClientSiteName)), #13#10]);
+
+  Append(Result, CRLF+'Domain Policy Information:'#13#10);
+  Append(Result, [' - Netbios Domain Name: ', Trim(RawUtf8(NetbiosDomainName)), #13#10]);
+  Append(Result, [' - DNS Domain Name: ', Trim(RawUtf8(DnsDomainName)), #13#10]);
+  Append(Result, [' - DNS Forest Name: ', Trim(RawUtf8(DnsForestName)), #13#10]);
+  Append(Result, [' - Domain GUID: ', Trim(RawUtf8(DomainGuidStr)), #13#10]);
+  Append(Result, [' - Domain SID: ', Trim(RawUtf8(SidToText(@DomainSID))), #13#10]);
+
+  Append(Result, CRLF+'Domain Controller Information:'#13#10);
+  Append(Result, [' - Name: ', Trim(RawUtf8(DCName)), #13#10]);
+  Append(Result, [' - Address: ', Trim(RawUtf8(DCAddress)), #13#10]);
+  if DCAddressType = DS_INET_ADDRESS then
+    Append(Result, [' - Address Type: ', 'DS_INET_ADDRESS', Format(' (%d)', [ DCAddressType]), #13#10])
+  else if DCAddressType = DS_NETBIOS_ADDRESS then
+    Append(Result, [' - Address Type: ', 'DS_NETBIOS_ADDRESS', Format(' (%d)', [ DCAddressType]), #13#10])
+  else
+    Append(Result, [' - Address Type: ', DCAddressType, Format(' (%d)', [ DCAddressType]), #13#10]);
+  Append(Result, Format(' - Flags: 0x%x'#13#10, [DCFlags]));
+  Append(Result, [' - Site Name: ', Trim(RawUtf8(DCSiteName)), #13#10]);
+
+  if Length(GroupPolicies) = 0 then
+    Exit;
+  Append(Result, CRLF+CRLF+'Embedded Group Policies:'+CRLF);
+  for GroupPolicy in GroupPolicies do
+  begin
+    Append(Result, [' - ', Trim(RawUtf8(GroupPolicy.Name))]);
+    if not DumpGpoRegistryValues then
+    begin
+      Append(Result, [#13#10]);
+      continue;
+    end;
+    Append(Result, [':', #13#10]);
+    for RegistryValue in GroupPolicy.Values do
+    begin
+      Append(Result, ['    - ', Trim(RawUtf8(RegistryValue.Key)), ' : ', Trim(RawUtf8(RegistryValue.ValueName)), ' ']);
+
+      case RegistryValue.ValueType of
+        REG_DWORD: Append(Result, [PUInt32(@RegistryValue.Value[1])^]);
+        REG_QWORD: Append(Result, [PUInt64(@RegistryValue.Value[1])^]);
+      end;
+      Append(Result, [' (', RegistryTypeToString(RegistryValue.ValueType), ' on ', RegistryValue.ValueSize, ' bytes)'#13#10]);
+    end;
+  end;
 end;
 
 { TDJoinParser }

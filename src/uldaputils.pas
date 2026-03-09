@@ -63,8 +63,9 @@ var
   uacAttr: TLdapAttribute;
   dnsAttr: TLdapAttribute;
   spnAttr: TLdapAttribute;
-  Cn: RawUtf8;
+  Cn, cSam, cDn, cSafe: RawUtf8;
   Enum: TLdapError;
+  attrs: TLdapAttributeList;
 
   function ExistAttrInList(const Element: RawUtf8; const Attr: TLdapAttribute): Boolean;
   var
@@ -72,7 +73,7 @@ var
   begin
     Result := False;
     for i := 0 to Attr.Count - 1 do
-      if Attr.List[i] = Element then
+      if LowerCase(Attr.List[i]) = LowerCase(Element) then
       begin
         Result := True;
         Exit;
@@ -83,7 +84,7 @@ begin
   if Password = '' then
     Password := GetRandomPassword;
 
-  HostEntry := Ldap.SearchFirst(Ldap.DefaultDN, Format('(sAMAccountName=%s$)', [UpperCase(ComputerName)]), ['userAccountControl']);
+  HostEntry := Ldap.SearchFirst(Ldap.DefaultDN, Format('(sAMAccountName=%s$)', [LdapEscape(UpperCase(ComputerName))]), ['userAccountControl']);
 
   if Assigned(HostEntry) then
   begin
@@ -140,10 +141,23 @@ begin
   // Not a else statement because it can be modified if aieOverwrite
   if not Assigned(HostEntry) then
   begin
-    if not Ldap.AddComputer(ComputerOU, ComputerName, ErrorMessage, Password, False) then
-    begin
-      ErrorMessage := 'Failed to create a new computer entry: ' + RawLdapErrorString(Ldap.ResultCode, Enum);
-      Result := ccrCreateFailed;
+    cSafe := LdapEscape(ComputerName);
+    cDn := Join(['CN=', cSafe, ',', ComputerOU]);
+    cSam := Join([UpperCase(cSafe), '$']);
+    attrs := TLdapAttributeList.Create(
+      [atObjectClass, atCommonName, atName, atSAMAccountName],
+      ['computer',    cSafe,        cSafe,  cSam]);
+    try
+      attrs.UserAccountControl := [uacWorkstationTrusted];
+      if Password <> '' then
+        attrs.AddUnicodePwd(Password);
+      if not Ldap.Add(cDn, attrs) then
+      begin
+        ErrorMessage := 'Failed to create a new computer entry: ' + RawLdapErrorString(Ldap.ResultCode, Enum);
+        Result := ccrCreateFailed;
+      end;
+    finally
+      FreeAndNil(attrs);
     end;
   end
   // If we didn't created the computer we still need to update the password
@@ -157,7 +171,7 @@ begin
   //
   // servicePrincipalName and dNSHostName completion
   //
-  HostEntry := Ldap.SearchFirst(Ldap.DefaultDN, Format('(sAMAccountName=%s$)', [UpperCase(ComputerName)]), ['userAccountControl', 'servicePrincipalName', 'dNSHostName']);
+  HostEntry := Ldap.SearchFirst(Ldap.DefaultDN, Format('(sAMAccountName=%s$)', [LdapEscape(UpperCase(ComputerName))]), ['userAccountControl', 'servicePrincipalName', 'dNSHostName']);
 
   if Assigned(HostEntry) then
   begin
@@ -248,8 +262,6 @@ end;
 function UpdateComputerPassword(Ldap: TLdapClient; Computer: TLdapResult;
   var Password: SpiUtf8): Boolean;
 var
-  QuotedPassword: SpiUtf8;
-  PwdU16: RawByteString;
   PwdAttr: TLdapAttribute;
 begin
   Result := False;
@@ -290,7 +302,13 @@ var
   Operation: TLdapModifyOp;
 begin
   Operation := lmoReplace;
-  MemberAttr := Ldap.SearchObject(GroupDN, '', 'member');
+  MemberAttr := nil;
+  Ldap.SearchRangeBegin;
+  try
+    MemberAttr := Ldap.SearchObject(GroupDN, '', 'member');
+  finally
+    Ldap.SearchRangeEnd;
+  end;
 
   // No group member yet
   if not Assigned(MemberAttr) then
@@ -330,7 +348,13 @@ begin
     Exit;
   end;
 
-  SiteDN := Ldap.SearchObject('CN='+subnet+',CN=Subnets,CN=Sites,CN=Configuration,' + ldap.DefaultDN, '', 'siteObject');
+  SiteDN := nil;
+  Ldap.SearchRangeBegin;
+  try
+    SiteDN := Ldap.SearchObject('CN='+subnet+',CN=Subnets,CN=Sites,CN=Configuration,' + ldap.DefaultDN, '', 'siteObject');
+  finally
+    Ldap.SearchRangeEnd;
+  end;
   if not Assigned(SiteDN) then
     Exit;
   previousScope := Ldap.SearchScope;
@@ -339,7 +363,12 @@ begin
     DcBlObject := Ldap.SearchFirst('CN=Servers,' + SiteDN.GetReadable, '', ['serverReference']);
     if not Assigned(DcBlObject) then
       Exit;
-    Result := ldap.SearchObject(DcBlObject.Attributes.GetByName( 'serverReference'), '',[]);
+    ldap.SearchRangeBegin;
+    try
+      Result := ldap.SearchObject(DcBlObject.Attributes.GetByName( 'serverReference'), '',[]);
+    finally
+      ldap.SearchRangeEnd;
+    end;
   finally
     ldap.SearchScope := previousScope;
   end;
