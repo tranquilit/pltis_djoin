@@ -299,28 +299,8 @@ begin
 end;
 
 function AddUserInGroup(Ldap: TLdapClient; ComputerDN, GroupDN: RawUtf8): Boolean;
-var
-  MemberAttr: TLdapAttribute;
-  Operation: TLdapModifyOp;
 begin
-  Operation := lmoReplace;
-  MemberAttr := nil;
-  Ldap.SearchRangeBegin;
-  try
-    MemberAttr := Ldap.SearchObject(GroupDN, '', 'member');
-  finally
-    Ldap.SearchRangeEnd;
-  end;
-
-  // No group member yet
-  if not Assigned(MemberAttr) then
-  begin
-    Operation := lmoAdd;
-    MemberAttr := TLdapAttribute.Create('member', atMember);
-  end;
-
-  MemberAttr.Add(ComputerDN);
-  Result := Ldap.Modify(GroupDN, Operation, MemberAttr) or (Ldap.ResultCode = LDAP_RES_ENTRY_ALREADY_EXISTS);
+  Result := Ldap.Modify(GroupDN, lmoAdd, 'member', ComputerDN) or (Ldap.ResultCode = LDAP_RES_ENTRY_ALREADY_EXISTS);
 end;
 
 function Ip4ToCardinal(text: RawUtf8): Cardinal;
